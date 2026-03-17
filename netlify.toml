@@ -1,0 +1,13 @@
+# Netlify configuration for SHC Library Portal
+
+[build]
+  # Static site - no build command needed
+  publish = "."
+  functions = "netlify/functions"
+
+# Redirect config API to the function
+[[redirects]]
+  from = "/api/config"
+  to = "/.netlify/functions/config"
+  status = 200
+  force = true

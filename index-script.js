@@ -3,15 +3,41 @@ let currentTarget = '#', currentResource = '';
 let allVisits = [];
 let isAdminAllowed = false;
 
-// Initialize config from config.js if available, otherwise use localStorage
-function initializeConfig() {
+// Initialize config from multiple sources (in priority order):
+// 1. Netlify Function (for production)
+// 2. config.js (for local development)
+// 3. localStorage (user-entered backup)
+async function initializeConfig() {
+  try {
+    // Try to fetch from Netlify Function first
+    const response = await fetch('/api/config');
+    if (response.ok) {
+      const config = await response.json();
+      if (config.SUPABASE_URL && config.SUPABASE_KEY) {
+        localStorage.setItem('sb_url', config.SUPABASE_URL);
+        localStorage.setItem('sb_key', config.SUPABASE_KEY);
+        return;
+      }
+    }
+  } catch (e) {
+    // Netlify Function not available (local development)
+  }
+
+  // Fall back to config.js (local development)
   if (window.APP_CONFIG && window.APP_CONFIG.SUPABASE_URL && window.APP_CONFIG.SUPABASE_KEY) {
     localStorage.setItem('sb_url', window.APP_CONFIG.SUPABASE_URL);
     localStorage.setItem('sb_key', window.APP_CONFIG.SUPABASE_KEY);
   }
+  // Otherwise use localStorage (user-entered credentials)
 }
 
-initializeConfig();
+// Initialize config on page load
+initializeConfig().then(() => {
+  loadStatsBar();
+}).catch(err => {
+  console.error('Config initialization error:', err);
+  loadStatsBar();
+});
 
 function getCfg() {
   return {
