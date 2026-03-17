@@ -1,257 +1,581 @@
-
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SHC Library Portal</title>
+  <title>SHC Library Portal — Sacred Heart College Lucena City</title>
   <link rel="stylesheet" href="index-styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
+
 <body>
+  <div class="app-shell">
 
-<div style="min-height:100vh;background:var(--lightgray);display:flex;flex-direction:column;">
-
-<div class="header">
-  <div class="header-inner">
-    <div class="logo-circle">SHC<br>LCI</div>
-    <div class="header-text">
-      <h1>Sacred Heart College</h1>
-      <p>LUCENA CITY, INC. — LIBRARY RESOURCE CENTER</p>
-    </div>
-  </div>
-</div>
-
-<div class="nav-bar">
-  <a class="active" id="nav-home" onclick="showPage('home')">Home</a><span>|</span>
-  <a id="nav-admin" onclick="showPage('admin')">Admin Dashboard</a><span>|</span>
-  <a href="#">Catalog</a><span>|</span>
-  <a href="#">Contacts</a>
-</div>
-
-<div class="stats-bar">
-  <div class="stat-item"><span class="stat-label">Total Visits</span><span class="stat-val" id="totalVisits">—</span></div>
-  <div class="stat-div"></div>
-  <div class="stat-item"><span class="stat-label">Today</span><span class="stat-val" id="todayVisits">—</span></div>
-  <div class="stat-div"></div>
-  <div class="stat-item"><span class="stat-label">Last Visitor</span><span class="stat-val" id="lastVisitor">—</span></div>
-  <div class="stat-div"></div>
-  <div class="stat-item"><span class="stat-label">Database</span><span id="dbStatus"><span class="db-badge db-pending">Not configured</span></span></div>
-</div>
-
-<!-- HOME PAGE -->
-<div class="page active" id="page-home">
-  <p class="section-title">Proquest for Faculty and Students</p>
-  <div class="resources-grid">
-    <div class="res-card">
-      <div class="card-logo"><div class="logo-pq-ebook"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6V2z"/></svg><span>ProQuest Ebook Central™</span></div></div>
-      <div class="card-body"><div class="card-label">ProQuest Ebook Central</div><button class="btn-access" onclick="openModal('ProQuest Ebook Central','https://ebookcentral.proquest.com/lib/sacredheart/home.action')">Click Here</button></div>
-    </div>
-    <div class="res-card">
-      <div class="card-logo"><div class="logo-pq-res"><span>ProQuest</span></div></div>
-      <div class="card-body"><div class="card-label">ProQuest Research Library</div><button class="btn-access" onclick="openModal('ProQuest Research Library','https://www.proquest.com/index?accountid=215602')">Click Here</button></div>
-    </div>
-  </div>
-
-  <p class="section-title">World Book Online</p>
-  <div class="resources-grid">
-    <div class="res-card">
-      <div class="card-logo"><div class="logo-wb"><span>WORLD BOOK ONLINE</span></div></div>
-      <div class="card-body"><div class="card-label">World Book Online Link</div><button class="btn-access" onclick="openModal('World Book Online','https://worldbookonline.com/wb/Login?ed=wb')">Click Here</button></div>
-    </div>
-    <div style="background:transparent;"></div>
-  </div>
-
-  <p class="section-title">3G E-Learning</p>
-  <div class="resources-grid">
-    <div class="res-card">
-      <div class="card-logo"><div class="logo-3g"><div style="text-align:center;"><div style="font-size:14px;font-weight:700;color:var(--red);">3G E-LEARNING</div><div style="font-size:10px;color:#555;">Smart Library</div></div></div></div>
-      <div class="card-body"><div class="card-label">3G E-Learning</div><button class="btn-access" onclick="openModal('3G E-Learning','https://3gsmartlibrary.com/Login1.aspx')">Click Here</button></div>
-    </div>
-    <div style="background:transparent;"></div>
-  </div>
-
-  <p class="section-title">Kite Digital Educational Solutions</p>
-  <div class="resources-grid">
-    <div class="res-card">
-      <div class="card-logo"><div class="logo-kite"><div class="logo-kite-icon"><span>KITE</span></div><div class="logo-kite-txt">Digital<br>Educational<br>Solutions</div></div></div>
-      <div class="card-body"><div class="card-label">Kite Academy</div><button class="btn-access" onclick="openModal('Kite Academy','https://kdes.ph/login.htm?tenant=canedupublishing')">Click Here</button></div>
-    </div>
-    <div style="background:transparent;"></div>
-  </div>
-
-  <p class="section-title">Encleare Online and Offline Digital Learning System</p>
-  <div class="resources-grid">
-    <div class="res-card">
-      <div class="card-logo"><div class="logo-enc"><span>ENCLEARE™</span></div></div>
-      <div class="card-body"><div class="card-label">GEAP Link</div><button class="btn-access" onclick="openModal('Encleare (GEAP)','https://encleare.com/')">Click Here</button></div>
-    </div>
-    <div style="background:transparent;"></div>
-  </div>
-
-  <div style="margin-top:10px;padding-top:20px;border-top:1px solid #ddd;">
-    <p class="section-title" style="margin-bottom:14px;">Library Utilization Guide</p>
-    <button class="guide-btn" onclick="openModal('Library and AVRC Utilization Guide','https://read.bookcreator.com/0hsSwcGsIDaY6cAZiarTkq75kVb2/lFzFDXGBRbq9tabJC1zNHg/HuR9ygIJTcu92GKGm_JVzA')">
-      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      Library and AVRC Information Resources Utilization Guide
-    </button>
-  </div>
-</div>
-
-<!-- ADMIN PAGE -->
-<div class="page" id="page-admin">
-  <div id="adminLogin" class="admin-login-wrap">
-    <div class="admin-login-box">
-      <div class="admin-login-icon"><svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 1 0 0 10A5 5 0 0 0 12 2zm0 12c-5.33 0-8 2.67-8 4v2h16v-2c0-1.33-2.67-4-8-4z"/></svg></div>
-      <h2>Admin Dashboard</h2>
-      <p>Enter your password to access visitor logs</p>
-      <input type="password" id="adminPwd" placeholder="Password" onkeydown="if(event.key==='Enter')checkLogin()" />
-      <button class="btn-login" onclick="checkLogin()">Sign In</button>
-      <div class="login-error" id="loginError">Incorrect password. Please try again.</div>
-    </div>
-  </div>
-
-  <div class="admin-dash" id="adminDash">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-      <p class="section-title" style="margin-bottom:0;border:none;padding:0;">Visitor Log Dashboard</p>
-      <button class="btn-cancel" onclick="logoutAdmin()" style="font-size:12px;padding:6px 14px;">Sign Out</button>
-    </div>
-
-    <div class="dash-stats">
-      <div class="dash-stat"><div class="ds-label">Total Visits</div><div class="ds-val" id="ds-total">—</div><div class="ds-sub">All time</div></div>
-      <div class="dash-stat"><div class="ds-label">Today</div><div class="ds-val" id="ds-today">—</div><div class="ds-sub" id="ds-today-date">—</div></div>
-      <div class="dash-stat"><div class="ds-label">This Week</div><div class="ds-val" id="ds-week">—</div><div class="ds-sub">Last 7 days</div></div>
-      <div class="dash-stat"><div class="ds-label">Top Resource</div><div class="ds-val" style="font-size:13px;line-height:1.3;" id="ds-top">—</div><div class="ds-sub">Most accessed</div></div>
-    </div>
-
-    <div class="admin-toolbar">
-      <input type="text" id="searchLog" placeholder="Search name, ID, course..." oninput="filterTable()" />
-      <select id="filterRes" onchange="filterTable()">
-        <option value="">All Resources</option>
-        <option>ProQuest Ebook Central</option>
-        <option>ProQuest Research Library</option>
-        <option>World Book Online</option>
-        <option>3G E-Learning</option>
-        <option>Kite Academy</option>
-        <option>Encleare (GEAP)</option>
-        <option>Library and AVRC Utilization Guide</option>
-      </select>
-      <select id="filterDate" onchange="filterTable()">
-        <option value="">All Dates</option>
-        <option value="today">Today</option>
-        <option value="week">This Week</option>
-        <option value="month">This Month</option>
-      </select>
-      <button class="btn-toolbar btn-refresh" onclick="loadVisits()">
-        <svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
-        Refresh
-      </button>
-      <button class="btn-toolbar btn-csv" onclick="exportCSV()">
-        <svg viewBox="0 0 24 24"><path d="M12 16l-4-4h3V4h2v8h3l-4 4zm-7 4h14v-2H5v2z"/></svg>
-        Download CSV
-      </button>
-    </div>
-
-    <div class="log-table-wrap">
-      <table class="log-table">
-        <thead>
-          <tr>
-            <th>#</th><th>Name</th><th>ID No.</th><th>Course</th><th>Year</th><th>Purpose</th><th>Resource</th><th>Date &amp; Time</th>
-          </tr>
-        </thead>
-        <tbody id="logTableBody"><tr class="loading-row"><td colspan="8">Loading records...</td></tr></tbody>
-      </table>
-    </div>
-
-    <!-- SUPABASE SETUP -->
-    <div class="setup-card">
-      <h3>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="#1A7340"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-        Supabase Setup — Connect Your Database
-      </h3>
-      <div class="step"><div class="step-num">1</div><div class="step-text">Go to <strong>supabase.com</strong>, sign up free, and create a new project. Name it <em>shc-library</em>.</div></div>
-      <div class="step"><div class="step-num">2</div><div class="step-text">In your Supabase project, go to <strong>SQL Editor</strong> and run this query to create the table:<br><br>
-        <code>create table visitor_log (id bigint generated always as identity primary key, name text, id_number text, course text, year_level text, purpose text, resource text, visited_at timestamptz default now());</code>
-      </div></div>
-      <div class="step"><div class="step-num">3</div><div class="step-text">Go to <strong>Project Settings → API</strong>. Copy your <em>Project URL</em> and <em>anon public key</em>.</div></div>
-      <div class="step"><div class="step-num">4</div><div class="step-text">Also in <strong>Authentication → Policies</strong>, run this to allow public inserts:<br><br>
-        <code>create policy "allow insert" on visitor_log for insert to anon with check (true); create policy "allow select" on visitor_log for select to anon using (true); alter table visitor_log enable row level security;</code>
-      </div></div>
-      <div class="step"><div class="step-num">5</div><div class="step-text">Paste your Project URL and anon key below, then click Save. Your database is live!</div></div>
-      <div class="config-grid">
-        <div class="form-group" style="margin:0;"><label style="display:block;font-size:11px;font-weight:600;color:var(--navy);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.4px;">Supabase Project URL</label><input type="text" id="cfgUrl" placeholder="https://xxxx.supabase.co" /></div>
-        <div class="form-group" style="margin:0;"><label style="display:block;font-size:11px;font-weight:600;color:var(--navy);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.4px;">Supabase Anon Key</label><input type="text" id="cfgKey" placeholder="eyJhbGci..." /></div>
+    <!-- HERO HEADER -->
+    <header class="hero">
+      <div class="hero-inner">
+        <div class="hero-logo">
+          <span class="hero-logo-text">SHC<br>LCI</span>
+        </div>
+        <div class="hero-copy">
+          <div class="hero-eyebrow">Library Resource Center</div>
+          <h1 class="hero-title">Sacred Heart College — Lucena City, Inc.</h1>
+          <p class="hero-subtitle">Your gateway to academic e-resources, digital libraries, and learning tools</p>
+        </div>
+        <div class="hero-right">
+          <span class="hero-pill gold">AY 2025–2026</span>
+          <span class="hero-pill">E-Resources</span>
+        </div>
       </div>
-      <button class="btn-save-cfg" onclick="saveConfig()">Save & Test Connection</button>
-      <div class="cfg-status" id="cfgStatus"></div>
+    </header>
+
+    <!-- STICKY NAV -->
+    <nav class="nav-bar">
+      <div class="nav-inner">
+        <div class="nav-links">
+          <a class="active" id="nav-home" onclick="showPage('home')">Home</a>
+          <a id="nav-admin" onclick="showPage('admin')">Admin Dashboard</a>
+          <a href="#">Catalog</a>
+          <a href="#">Contacts</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- LIVE STATS STRIP -->
+    <div class="stats-strip">
+      <div class="stats-inner">
+        <div class="stat-item">
+          <span class="stat-label">Total Visits</span>
+          <span class="stat-val" id="totalVisits">—</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Today</span>
+          <span class="stat-val" id="todayVisits">—</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Last Visitor</span>
+          <span class="stat-val" id="lastVisitor">—</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Database</span>
+          <span id="dbStatus"><span class="db-badge db-pending">Not configured</span></span>
+        </div>
+      </div>
     </div>
+
+    <!-- ════════════════════════
+       HOME PAGE
+  ════════════════════════ -->
+    <main class="page active" id="page-home">
+
+      <!-- Welcome Banner -->
+      <div class="welcome-banner">
+        <div class="wb-left">
+          <div class="wb-eyebrow">Welcome to SHC Library</div>
+          <div class="wb-title">Access Your Digital Resources</div>
+          <div class="wb-sub">Browse and access all available online databases, e-books, and learning platforms. Click
+            any resource below and fill in your details to proceed.</div>
+        </div>
+        <div class="wb-right">
+          <div class="wb-stat">
+            <div class="wb-stat-val" id="wb-total">—</div>
+            <div class="wb-stat-lbl">Total Visits</div>
+          </div>
+          <div class="wb-stat">
+            <div class="wb-stat-val" id="wb-today">—</div>
+            <div class="wb-stat-lbl">Today</div>
+          </div>
+          <div class="wb-stat">
+            <div class="wb-stat-val">7</div>
+            <div class="wb-stat-lbl">Resources</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section header -->
+      <div class="section-hd">
+        <span class="section-hd-title">All E-Resources</span>
+        <div class="section-hd-line"></div>
+      </div>
+
+      <!-- UNIFIED RESOURCE GRID -->
+      <div class="all-resources-grid">
+
+        <!-- ProQuest Ebook Central -->
+        <div class="res-card">
+          <div class="card-top">
+            <div class="card-icon-wrap ci-pq-ebook">
+              <svg viewBox="0 0 24 24">
+                <path d="M6 2h9l5 5v15H6V2z" />
+              </svg>
+            </div>
+            <div class="card-info">
+              <div class="card-category cat-pq">ProQuest</div>
+              <div class="card-name">Ebook Central™</div>
+              <div class="card-desc">Thousands of academic ebooks for research and coursework.</div>
+            </div>
+          </div>
+          <div class="card-bottom">
+            <button class="btn-access"
+              onclick="openModal('ProQuest Ebook Central','https://ebookcentral.proquest.com/lib/sacredheart/home.action')">Access
+              Resource</button>
+          </div>
+        </div>
+
+        <!-- ProQuest Research Library -->
+        <div class="res-card">
+          <div class="card-top">
+            <div class="card-icon-wrap ci-pq-res">
+              <span>PQ</span>
+            </div>
+            <div class="card-info">
+              <div class="card-category cat-pq">ProQuest</div>
+              <div class="card-name">Research Library</div>
+              <div class="card-desc">Journals, dissertations, and full-text academic articles.</div>
+            </div>
+          </div>
+          <div class="card-bottom">
+            <button class="btn-access"
+              onclick="openModal('ProQuest Research Library','https://www.proquest.com/index?accountid=215602')">Access
+              Resource</button>
+          </div>
+        </div>
+
+        <!-- World Book Online -->
+        <div class="res-card">
+          <div class="card-top">
+            <div class="card-icon-wrap ci-wb">
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+              </svg>
+            </div>
+            <div class="card-info">
+              <div class="card-category cat-wb">Encyclopedia</div>
+              <div class="card-name">World Book Online</div>
+              <div class="card-desc">Trusted reference encyclopedia for all academic levels.</div>
+            </div>
+          </div>
+          <div class="card-bottom">
+            <button class="btn-access"
+              onclick="openModal('World Book Online','https://worldbookonline.com/wb/Login?ed=wb')">Access
+              Resource</button>
+          </div>
+        </div>
+
+        <!-- 3G E-Learning -->
+        <div class="res-card">
+          <div class="card-top">
+            <div class="card-icon-wrap ci-3g">
+              <span>3G</span>
+            </div>
+            <div class="card-info">
+              <div class="card-category cat-3g">E-Learning</div>
+              <div class="card-name">3G Smart Library</div>
+              <div class="card-desc">Interactive smart library with digital learning materials.</div>
+            </div>
+          </div>
+          <div class="card-bottom">
+            <button class="btn-access"
+              onclick="openModal('3G E-Learning','https://3gsmartlibrary.com/Login1.aspx')">Access Resource</button>
+          </div>
+        </div>
+
+        <!-- Kite -->
+        <div class="res-card">
+          <div class="card-top">
+            <div class="card-icon-wrap ci-kite">
+              <span>KITE</span>
+            </div>
+            <div class="card-info">
+              <div class="card-category cat-kite">Digital Platform</div>
+              <div class="card-name">Kite Academy</div>
+              <div class="card-desc">Digital educational solutions by CANED Publishing.</div>
+            </div>
+          </div>
+          <div class="card-bottom">
+            <button class="btn-access"
+              onclick="openModal('Kite Academy','https://kdes.ph/login.htm?tenant=canedupublishing')">Access
+              Resource</button>
+          </div>
+        </div>
+
+        <!-- Encleare -->
+        <div class="res-card">
+          <div class="card-top">
+            <div class="card-icon-wrap ci-enc">
+              <span>ENC</span>
+            </div>
+            <div class="card-info">
+              <div class="card-category cat-enc">GEAP</div>
+              <div class="card-name">Encleare™ System</div>
+              <div class="card-desc">Online and offline digital learning modules via GEAP.</div>
+            </div>
+          </div>
+          <div class="card-bottom">
+            <button class="btn-access" onclick="openModal('Encleare (GEAP)','https://encleare.com/')">Access
+              Resource</button>
+          </div>
+        </div>
+
+        <!-- Guide — full-width spanning card -->
+        <div class="res-card card-guide" style="grid-column:1/-1;">
+          <div class="card-top">
+            <div class="card-icon-wrap ci-guide">
+              <svg viewBox="0 0 24 24">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+                <polyline points="10 9 9 9 8 9" />
+              </svg>
+            </div>
+            <div class="card-info">
+              <div class="card-category cat-guide">Reference Guide</div>
+              <div class="card-name">Library &amp; AVRC Information Resources Utilization Guide</div>
+              <div class="card-desc">Step-by-step guide on how to properly use the SHC Library and AVRC information
+                resources. Covers access procedures, research tools, and best practices for students and faculty.</div>
+            </div>
+          </div>
+          <div class="card-bottom">
+            <button class="btn-access"
+              onclick="openModal('Library and AVRC Utilization Guide','https://read.bookcreator.com/0hsSwcGsIDaY6cAZiarTkq75kVb2/lFzFDXGBRbq9tabJC1zNHg/HuR9ygIJTcu92GKGm_JVzA')">Open
+              Guide</button>
+          </div>
+        </div>
+
+      </div><!-- /all-resources-grid -->
+    </main>
+
+    <!-- ════════════════════════
+       ADMIN PAGE
+  ════════════════════════ -->
+    <div class="page" id="page-admin">
+
+      <div id="adminLogin" class="admin-login-wrap">
+        <div class="admin-login-box">
+          <div class="admin-login-icon">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 2a5 5 0 1 0 0 10A5 5 0 0 0 12 2zm0 12c-5.33 0-8 2.67-8 4v2h16v-2c0-1.33-2.67-4-8-4z" />
+            </svg>
+          </div>
+          <h2>Admin Dashboard</h2>
+          <p>Enter your password to access visitor statistics and logs.</p>
+          <input type="password" id="adminPwd" placeholder="Enter password"
+            onkeydown="if(event.key==='Enter')checkLogin()" />
+          <button class="btn-login" onclick="checkLogin()">Sign In</button>
+          <div class="login-error" id="loginError">Incorrect password. Please try again.</div>
+        </div>
+      </div>
+
+      <div class="admin-dash" id="adminDash">
+
+        <div class="admin-header-row">
+          <span class="admin-page-title">Visitor Log Dashboard</span>
+          <button class="btn-signout" onclick="logoutAdmin()">Sign Out</button>
+        </div>
+
+        <div class="dash-stats">
+          <div class="dash-stat">
+            <div class="ds-label">Total Visits</div>
+            <div class="ds-val" id="ds-total">—</div>
+            <div class="ds-sub">All time</div>
+          </div>
+          <div class="dash-stat">
+            <div class="ds-label">Today</div>
+            <div class="ds-val" id="ds-today">—</div>
+            <div class="ds-sub" id="ds-today-date">—</div>
+          </div>
+          <div class="dash-stat">
+            <div class="ds-label">This Week</div>
+            <div class="ds-val" id="ds-week">—</div>
+            <div class="ds-sub">Last 7 days</div>
+          </div>
+          <div class="dash-stat">
+            <div class="ds-label">Top Resource</div>
+            <div class="ds-val" id="ds-top" style="font-size:14px;line-height:1.3;">—</div>
+            <div class="ds-sub">Most accessed</div>
+          </div>
+        </div>
+
+        <div class="admin-toolbar">
+          <input type="text" id="searchLog" placeholder="Search name, ID, course..." oninput="filterTable()" />
+          <select id="filterRes" onchange="filterTable()">
+            <option value="">All Resources</option>
+            <option>ProQuest Ebook Central</option>
+            <option>ProQuest Research Library</option>
+            <option>World Book Online</option>
+            <option>3G E-Learning</option>
+            <option>Kite Academy</option>
+            <option>Encleare (GEAP)</option>
+            <option>Library and AVRC Utilization Guide</option>
+          </select>
+          <select id="filterDate" onchange="filterTable()">
+            <option value="">All Dates</option>
+            <option value="today">Today</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+          </select>
+          <button class="btn-toolbar btn-refresh" onclick="loadVisits()">
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+            </svg>
+            Refresh
+          </button>
+          <button class="btn-toolbar btn-csv" onclick="exportCSV()">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 16l-4-4h3V4h2v8h3l-4 4zm-7 4h14v-2H5v2z" />
+            </svg>
+            Download CSV
+          </button>
+        </div>
+
+        <div class="log-table-wrap">
+          <table class="log-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>ID No.</th>
+                <th>Course</th>
+                <th>Year</th>
+                <th>Purpose</th>
+                <th>Resource</th>
+                <th>Date &amp; Time</th>
+              </tr>
+            </thead>
+            <tbody id="logTableBody">
+              <tr class="loading-row">
+                <td colspan="8">Loading records...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ANALYTICS SECTION -->
+        <div class="analytics-wrap" id="analyticsWrap">
+          <div class="analytics-hd">
+            <div class="analytics-hd-left">
+              <div class="analytics-hd-icon">
+                <svg viewBox="0 0 24 24">
+                  <path d="M18 20V10M12 20V4M6 20v-6" />
+                </svg>
+              </div>
+              <div>
+                <div class="analytics-hd-title">Library Usage Analytics</div>
+                <div class="analytics-hd-sub">Accreditation-ready summary &middot; Auto-generated from visitor logs
+                </div>
+              </div>
+            </div>
+            <div class="analytics-hd-actions">
+              <div class="report-period-wrap">
+                <label class="rp-label">Period</label>
+                <select id="reportPeriod" onchange="renderAllCharts()">
+                  <option value="all">All Time</option>
+                  <option value="month">This Month</option>
+                  <option value="week">This Week</option>
+                  <option value="today">Today</option>
+                </select>
+              </div>
+              <button class="btn-report btn-report-csv" onclick="downloadReportCSV()">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 16l-4-4h3V4h2v8h3l-4 4zm-7 4h14v-2H5v2z" />
+                </svg>Export CSV
+              </button>
+              <button class="btn-report btn-report-pdf" onclick="downloadReportPDF()">
+                <svg viewBox="0 0 24 24">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                </svg>Download Report
+              </button>
+            </div>
+          </div>
+          <div class="kpi-grid">
+            <div class="kpi-card kpi-crimson">
+              <div class="kpi-icon"><svg viewBox="0 0 24 24">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg></div>
+              <div class="kpi-body">
+                <div class="kpi-val" id="kpi-total">—</div>
+                <div class="kpi-label">Total Visitors</div>
+              </div>
+            </div>
+            <div class="kpi-card kpi-navy">
+              <div class="kpi-icon"><svg viewBox="0 0 24 24">
+                  <rect x="3" y="4" width="18" height="18" rx="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg></div>
+              <div class="kpi-body">
+                <div class="kpi-val" id="kpi-days">—</div>
+                <div class="kpi-label">Active Days</div>
+              </div>
+            </div>
+            <div class="kpi-card kpi-green">
+              <div class="kpi-icon"><svg viewBox="0 0 24 24">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22 4 12 14.01 9 11.01" />
+                </svg></div>
+              <div class="kpi-body">
+                <div class="kpi-val" id="kpi-courses">—</div>
+                <div class="kpi-label">Courses Served</div>
+              </div>
+            </div>
+            <div class="kpi-card kpi-gold">
+              <div class="kpi-icon"><svg viewBox="0 0 24 24">
+                  <path
+                    d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                </svg></div>
+              <div class="kpi-body">
+                <div class="kpi-val" id="kpi-top-res">—</div>
+                <div class="kpi-label">Top Resource</div>
+              </div>
+            </div>
+          </div>
+          <div class="charts-row">
+            <div class="chart-card chart-card-lg">
+              <div class="chart-card-hd"><span class="chart-card-title">Resource Usage</span><span
+                  class="chart-card-sub">Visits per e-resource</span></div>
+              <div class="chart-body"><canvas id="chartResource"></canvas></div>
+            </div>
+            <div class="chart-card chart-card-sm">
+              <div class="chart-card-hd"><span class="chart-card-title">Daily Trend</span><span
+                  class="chart-card-sub">Visits over time</span></div>
+              <div class="chart-body"><canvas id="chartDaily"></canvas></div>
+            </div>
+          </div>
+          <div class="charts-row charts-row-3">
+            <div class="chart-card">
+              <div class="chart-card-hd"><span class="chart-card-title">By Department / Course</span><span
+                  class="chart-card-sub">Top 8 courses</span></div>
+              <div class="chart-body chart-body-tall"><canvas id="chartDept"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-card-hd"><span class="chart-card-title">By Year Level</span><span
+                  class="chart-card-sub">Student distribution</span></div>
+              <div class="chart-body"><canvas id="chartYear"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-card-hd"><span class="chart-card-title">Purpose of Visit</span><span
+                  class="chart-card-sub">Why students visit</span></div>
+              <div class="chart-body"><canvas id="chartPurpose"></canvas></div>
+            </div>
+          </div>
+          <div class="charts-row">
+            <div class="chart-card">
+              <div class="chart-card-hd"><span class="chart-card-title">Top Courses Ranking</span><span
+                  class="chart-card-sub">Sorted by visit count</span></div>
+              <div class="rank-table-wrap" id="rankCourse"></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-card-hd"><span class="chart-card-title">Resource Utilization Ranking</span><span
+                  class="chart-card-sub">Sorted by access count</span></div>
+              <div class="rank-table-wrap" id="rankResource"></div>
+            </div>
+          </div>
+          <div class="analytics-empty" id="analyticsEmpty" style="display:none;"><svg viewBox="0 0 24 24">
+              <path d="M18 20V10M12 20V4M6 20v-6" />
+            </svg>
+            <p>No visitor data for the selected period.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <footer class="footer">
+      <p><strong>Sacred Heart College Lucena City, Inc.</strong> — Library Resource Center &nbsp;·&nbsp; All rights
+        reserved &copy; 2026</p>
+    </footer>
+
   </div>
-</div>
 
-<div class="footer">
-  <p><strong>Sacred Heart College Lucena City, Inc.</strong> — Library Resource Center &nbsp;|&nbsp; All rights reserved &copy; 2025</p>
-</div>
-</div>
-
-<!-- VISITOR FORM MODAL -->
-<div class="overlay" id="overlay">
-  <div class="modal">
-    <div class="modal-header">
-      <div class="modal-hicon"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
-      <div class="modal-title" id="modalTitle">Access Resource</div>
-    </div>
-    <div class="modal-sub">Fill in your details to log your visit and proceed.</div>
-    <div class="form-row">
-      <div class="form-group"><label>Last Name</label><input type="text" id="fLastName" placeholder="dela Cruz" /></div>
-      <div class="form-group"><label>First Name</label><input type="text" id="fFirstName" placeholder="Juan" /></div>
-    </div>
-    <div class="form-group"><label>ID Number</label><input type="text" id="fID" placeholder="e.g. 2024-00123" /></div>
-    <div class="form-group">
-      <label>Course / Department</label>
-      <select id="fCourse">
-        <option value="">— Select your course —</option>
-        <option>Bachelor of Arts</option>
-        <option>Bachelor of Science in Nursing</option>
-        <option>Bachelor of Science in Education</option>
-        <option>Bachelor of Science in Accountancy</option>
-        <option>Bachelor of Science in Business Administration</option>
-        <option>Bachelor of Science in Computer Science</option>
-        <option>Bachelor of Science in </option>
-        <option>Bachelor of Science in Social Work</option>
-        <option>Senior High School</option>
-        <option>Faculty / Staff</option>
-        <option>Graduate School</option>
-        <option>Other</option>
-      </select>
-    </div>
-    <div class="form-row">
+  <!-- VISITOR FORM MODAL -->
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-hicon">
+          <svg viewBox="0 0 24 24">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+        </div>
+        <div class="modal-title" id="modalTitle">Access Resource</div>
+      </div>
+      <div class="modal-sub">Please fill in your details to log your visit and proceed.</div>
+      <div class="form-row">
+        <div class="form-group"><label>Last Name</label><input type="text" id="fLastName" placeholder="dela Cruz"
+            autocomplete="family-name" /></div>
+        <div class="form-group"><label>First Name</label><input type="text" id="fFirstName" placeholder="Juan"
+            autocomplete="given-name" /></div>
+      </div>
+      <div class="form-group"><label>ID Number</label><input type="text" id="fID" placeholder="e.g. 2024-00123" /></div>
       <div class="form-group">
-        <label>Year Level</label>
-        <select id="fYear">
-          <option value="">Year</option>
-          <option>1st Year</option><option>2nd Year</option><option>3rd Year</option>
-          <option>4th Year</option><option>5th Year</option><option>Faculty / Staff</option>
+        <label>Course / Department</label>
+        <select id="fCourse">
+          <option value="">— Select your course —</option>
+          <option>Bachelor of Arts</option>
+          <option>Bachelor of Science in Nursing</option>
+          <option>Bachelor of Science in Pharmacy</option>
+          <option>Bachelor of Science in Education</option>
+          <option>Bachelor of Science in Accountancy</option>
+          <option>Bachelor of Science in Business Administration</option>
+          <option>Bachelor of Science in Computer Science</option>
+          <option>Bachelor of Science in Management Accountancy</option>
+          <option>Bachelor of Science in Psychology</option>
+          <option>Bachelor of Science in Social Work</option>
+          <option>BED(Basic Education Department)</option>
+          <option>Faculty / Staff</option>
+          <option>Graduate School</option>
+          <option>Other</option>
         </select>
       </div>
-      <div class="form-group">
-        <label>Purpose</label>
-        <select id="fPurpose">
-          <option value="">Purpose</option>
-          <option>Research</option><option>Assignment</option><option>Thesis / Dissertation</option>
-          <option>Leisure Reading</option><option>Professional Development</option><option>Others</option>
-        </select>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Year Level</label>
+          <select id="fYear">
+            <option value="">Year</option>
+            <option>1st Year</option>
+            <option>2nd Year</option>
+            <option>3rd Year</option>
+            <option>4th Year</option>
+            <option>5th Year</option>
+            <option>Graduate Student</option>
+            <option>Faculty / Staff</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Purpose of Visit</label>
+          <select id="fPurpose">
+            <option value="">Purpose</option>
+            <option>Research</option>
+            <option>Assignment</option>
+            <option>Thesis / Dissertation</option>
+            <option>Leisure Reading</option>
+            <option>Professional Development</option>
+            <option>Others</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+        <button class="btn-submit" id="submitBtn" onclick="submitForm()">Proceed to Resource</button>
       </div>
     </div>
-    <div class="modal-footer">
-      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
-      <button class="btn-submit" id="submitBtn" onclick="submitForm()">Proceed to Resource</button>
-    </div>
   </div>
-</div>
 
-<div class="toast" id="toast"></div>
-
-<script src="config.js"></script>
-<script src="index-script.js"></script>
-</div>
+  <div class="toast" id="toast"></div>
+  <script src="config.js"></script>
+  <script src="index-script.js"></script>
 </body>
+
 </html>
