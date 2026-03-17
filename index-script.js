@@ -1,4 +1,3 @@
-// Admin access is URL-based only. Add ?admin=enabled to URL to access.
 let currentTarget = '#', currentResource = '';
 let allVisits = [];
 let isAdminAllowed = false;
