@@ -99,26 +99,29 @@ body {
     gap: 20px;
 }
 
-.hero-logo {
-    width: 68px;
-    height: 68px;
-    border-radius: 50%;
+.hero-logo-wrap {
     flex-shrink: 0;
-    background: rgba(255, 255, 255, 0.1);
-    border: 2px solid rgba(255, 255, 255, 0.22);
     display: flex;
     align-items: center;
     justify-content: center;
-    backdrop-filter: blur(4px);
 }
 
-.hero-logo-text {
-    font-family: 'Lora', serif;
-    font-size: 12px;
-    font-weight: 600;
-    color: #fff;
-    text-align: center;
-    line-height: 1.25;
+.hero-logo-img {
+    width: 80px;
+    height: 80px;
+    object-fit: contain;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    padding: 3px;
+    backdrop-filter: blur(4px);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));
+}
+
+.hero-logo-img:hover {
+    transform: scale(1.06);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
 .hero-copy {
@@ -1450,9 +1453,9 @@ body {
         display: none;
     }
 
-    .hero-logo {
-        width: 52px;
-        height: 52px;
+    .hero-logo-img {
+        width: 56px;
+        height: 56px;
     }
 
     .admin-toolbar {
@@ -1888,5 +1891,24 @@ body {
     .btn-report {
         padding: 8px 12px;
         font-size: 12px;
+    }
+}
+
+@media (max-width: 768px) {
+    .hero-logo-img {
+        width: 58px;
+        height: 58px;
+    }
+}
+
+@media (max-width: 520px) {
+    .hero-logo-img {
+        width: 46px;
+        height: 46px;
+        padding: 2px;
+    }
+
+    .hero-logo-wrap:last-of-type {
+        display: none;
     }
 }
