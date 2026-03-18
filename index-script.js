@@ -219,9 +219,7 @@ function renderTableData(data) {
       <td style="color:var(--muted);font-size:11px;">${i + 1}</td>
       <td style="font-weight:500;">${e.name || '—'}</td>
       <td style="font-family:monospace;font-size:12px;">${e.id_number || '—'}</td>
-      <td style="font-size:12px;">${e.course || '—'}</td>
-      <td style="font-size:12px;">${e.year_level || '—'}</td>
-      <td><span class="badge b-green">${e.purpose || '—'}</span></td>
+      <td style="font-size:12px;">${e.course || '—'}</td>      <td><span class="badge b-green">${e.purpose || '—'}</span></td>
       <td><span class="badge ${badge(e.resource)}">${e.resource || '—'}</span></td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap;">${e.visited_at ? new Date(e.visited_at).toLocaleString() : '—'}</td>
     </tr>
@@ -233,13 +231,12 @@ function exportCSV() {
     showToast('No data to export.');
     return;
   }
-  let headers = ['#', 'Name', 'ID Number', 'Course', 'Year Level', 'Purpose', 'Resource', 'Date & Time'];
+  let headers = ['#', 'Name', 'ID Number', 'Course', 'Purpose', 'Resource', 'Date & Time'];
   let rows = allVisits.map((e, i) => [
     i + 1,
     e.name || '',
     e.id_number || '',
     e.course || '',
-    e.year_level || '',
     e.purpose || '',
     e.resource || '',
     e.visited_at ? new Date(e.visited_at).toLocaleString() : ''
@@ -302,7 +299,7 @@ function openModal(name, url) {
 function closeModal() {
   document.getElementById('overlay').classList.remove('active');
   ['fLastName', 'fFirstName', 'fID'].forEach(id => document.getElementById(id).value = '');
-  ['fCourse', 'fYear', 'fPurpose'].forEach(id => document.getElementById(id).value = '');
+  ['fCourse', 'fPurpose'].forEach(id => document.getElementById(id).value = '');
 }
 
 async function submitForm() {
@@ -310,7 +307,6 @@ async function submitForm() {
   let fn = document.getElementById('fFirstName').value.trim();
   let id = document.getElementById('fID').value.trim();
   let course = document.getElementById('fCourse').value;
-  let year = document.getElementById('fYear').value;
   let purpose = document.getElementById('fPurpose').value;
   if (!ln || !fn || !course) {
     showToast('Please fill in Last Name, First Name, and Course.');
@@ -320,7 +316,6 @@ async function submitForm() {
     name: fn + ' ' + ln,
     id_number: id,
     course: course,
-    year_level: year,
     purpose: purpose,
     resource: currentResource
   };
@@ -356,7 +351,7 @@ document.getElementById('adminPwd').addEventListener('keydown', function (e) {
 ═══════════════════════════════════════════════════ */
 
 let _chartRes = null, _chartDaily = null, _chartDept = null,
-    _chartYear = null, _chartPurpose = null;
+    _chartPurpose = null;
 
 const PALETTE_BAR = ['#B91C1C','#1E3A5F','#166534','#C9952A','#7C2D12','#1E40AF','#065F46','#6B21A8'];
 const PALETTE_PIE = ['#B91C1C','#1E3A5F','#C9952A','#166534','#7C2D12','#6B21A8','#0369A1','#9F1239'];
@@ -394,7 +389,6 @@ function renderAllCharts() {
   renderResourceChart(data);
   renderDailyChart(data);
   renderDeptChart(data);
-  renderYearChart(data);
   renderPurposeChart(data);
   renderRankingTable('rankCourse',   countBy(data,'course'),   'course');
   renderRankingTable('rankResource', countBy(data,'resource'), 'resource');
@@ -446,21 +440,6 @@ function renderDeptChart(data) {
   });
 }
 
-function renderYearChart(data) {
-  const ctx = document.getElementById('chartYear'); if(!ctx) return;
-  _chartYear = destroyChart(_chartYear);
-  const ORDER = ['1st Year','2nd Year','3rd Year','4th Year','5th Year','Faculty / Staff','Unknown'];
-  const map = {};
-  data.forEach(e => { const y=(e.year_level||'Unknown').trim(); map[y]=(map[y]||0)+1; });
-  const entries = ORDER.filter(k=>map[k]).map(k=>[k,map[k]]);
-  Object.entries(map).forEach(([k,v])=>{ if(!ORDER.includes(k)) entries.push([k,v]); });
-  _chartYear = new Chart(ctx, {
-    type:'doughnut',
-    data:{ labels:entries.map(([k])=>k), datasets:[{data:entries.map(([,v])=>v),backgroundColor:PALETTE_PIE,borderWidth:2,borderColor:'#fff'}]},
-    options:{responsive:true,maintainAspectRatio:true,cutout:'58%',plugins:{legend:{position:'bottom',labels:{font:{size:11},padding:10,boxWidth:12}},tooltip:{callbacks:{label:c=>{ const tot=entries.reduce((a,[,v])=>a+v,0); return ` ${c.label}: ${c.raw} (${Math.round(c.raw/tot*100)}%)`; }}}}}
-  });
-}
-
 function renderPurposeChart(data) {
   const ctx = document.getElementById('chartPurpose'); if(!ctx) return;
   _chartPurpose = destroyChart(_chartPurpose);
@@ -496,8 +475,8 @@ function downloadReportCSV() {
   const data = getFilteredVisits();
   if(!data.length){ showToast('No data for the selected period.'); return; }
   const period = document.getElementById('reportPeriod').value;
-  const headers = ['#','Name','ID Number','Course / Department','Year Level','Purpose','Resource Accessed','Date & Time'];
-  const rows = data.map((e,i)=>[i+1,e.name||'',e.id_number||'',e.course||'',e.year_level||'',e.purpose||'',e.resource||'',e.visited_at?new Date(e.visited_at).toLocaleString():'']);
+  const headers = ['#','Name','ID Number','Course / Department','Purpose','Resource Accessed','Date & Time'];
+  const rows = data.map((e,i)=>[i+1,e.name||'',e.id_number||'',e.course||'',e.purpose||'',e.resource||'',e.visited_at?new Date(e.visited_at).toLocaleString():'']);
   const csv = [headers,...rows].map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
   const blob = new Blob([csv],{type:'text/csv'});
   const url = URL.createObjectURL(blob);
@@ -516,12 +495,11 @@ function downloadReportPDF() {
   const now = new Date();
   const resCounts  = countBy(data,'resource');
   const crseCounts = countBy(data,'course');
-  const yearCounts = countBy(data,'year_level');
   const purpCounts = countBy(data,'purpose');
   const uniqueDays = new Set(data.map(e=>e.visited_at.slice(0,10))).size;
   const uniqueCrs  = new Set(data.map(e=>e.course).filter(Boolean)).size;
   const topRes = resCounts[0];
-  const tblRows = data.slice(0,200).map((e,i)=>`<tr style="background:${i%2===0?'#fff':'#f9f8f6'}"><td>${i+1}</td><td><strong>${e.name||'—'}</strong></td><td style="font-family:monospace;font-size:11px;">${e.id_number||'—'}</td><td>${e.course||'—'}</td><td>${e.year_level||'—'}</td><td>${e.purpose||'—'}</td><td>${e.resource||'—'}</td><td style="font-size:11px;">${e.visited_at?new Date(e.visited_at).toLocaleString():'—'}</td></tr>`).join('');
+  const tblRows = data.slice(0,200).map((e,i)=>`<tr style="background:${i%2===0?'#fff':'#f9f8f6'}"><td>${i+1}</td><td><strong>${e.name||'—'}</strong></td><td style="font-family:monospace;font-size:11px;">${e.id_number||'—'}</td><td>${e.course||'—'}</td><td>${e.purpose||'—'}</td><td>${e.resource||'—'}</td><td style="font-size:11px;">${e.visited_at?new Date(e.visited_at).toLocaleString():'—'}</td></tr>`).join('');
   const mkRank = (arr,limit=10) => arr.slice(0,limit).map(([n,c],i)=>`<tr><td style="width:28px;font-weight:700;color:#B91C1C;">${i+1}</td><td>${n}</td><td style="text-align:right;font-weight:700;color:#1E3A5F;">${c}</td></tr>`).join('');
   const mkSplit = (arr) => arr.map(([n,c])=>`<tr><td>${n||'Unknown'}</td><td style="text-align:right;font-weight:700;">${c}</td><td style="text-align:right;color:#78716C;">${Math.round(c/data.length*100)}%</td></tr>`).join('');
 
@@ -583,12 +561,12 @@ function downloadReportPDF() {
       <div class="sec-title">Visitor Demographics</div>
       <div class="two">
         <table><thead><tr><th>#</th><th>Course / Department</th><th style="text-align:right">Visits</th></tr></thead><tbody>${mkRank(crseCounts)}</tbody></table>
-        <table><thead><tr><th>Year Level</th><th style="text-align:right">Count</th><th style="text-align:right">%</th></tr></thead><tbody>${mkSplit(yearCounts)}</tbody></table>
+
       </div>
     </div>
     <div class="sec">
       <div class="sec-title">Visitor Log — ${Math.min(data.length,200)} of ${data.length} records</div>
-      <table><thead><tr><th>#</th><th>Name</th><th>ID No.</th><th>Course</th><th>Year</th><th>Purpose</th><th>Resource</th><th>Date &amp; Time</th></tr></thead><tbody>${tblRows}</tbody></table>
+      <table><thead><tr><th>#</th><th>Name</th><th>ID No.</th><th>Course</th><th>Purpose</th><th>Resource</th><th>Date &amp; Time</th></tr></thead><tbody>${tblRows}</tbody></table>
       ${data.length>200?'<p style="text-align:center;font-size:11px;color:#78716C;margin-top:10px;">Showing first 200 records. Use Export CSV for full data.</p>':''}
     </div>
   </div>

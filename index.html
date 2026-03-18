@@ -346,7 +346,6 @@
                 <th>Name</th>
                 <th>ID No.</th>
                 <th>Course</th>
-                <th>Year</th>
                 <th>Purpose</th>
                 <th>Resource</th>
                 <th>Date &amp; Time</th>
@@ -457,17 +456,13 @@
               <div class="chart-body"><canvas id="chartDaily"></canvas></div>
             </div>
           </div>
-          <div class="charts-row charts-row-3">
+          <div class="charts-row charts-row-2">
             <div class="chart-card">
               <div class="chart-card-hd"><span class="chart-card-title">By Department / Course</span><span
                   class="chart-card-sub">Top 8 courses</span></div>
               <div class="chart-body chart-body-tall"><canvas id="chartDept"></canvas></div>
             </div>
-            <div class="chart-card">
-              <div class="chart-card-hd"><span class="chart-card-title">By Year Level</span><span
-                  class="chart-card-sub">Student distribution</span></div>
-              <div class="chart-body"><canvas id="chartYear"></canvas></div>
-            </div>
+
             <div class="chart-card">
               <div class="chart-card-hd"><span class="chart-card-title">Purpose of Visit</span><span
                   class="chart-card-sub">Why students visit</span></div>
@@ -549,33 +544,17 @@
           <option>Other</option>
         </select>
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Year Level</label>
-          <select id="fYear">
-            <option value="">Year</option>
-            <option>1st Year</option>
-            <option>2nd Year</option>
-            <option>3rd Year</option>
-            <option>4th Year</option>
-            <option>5th Year</option>
-            <option>Graduate Student</option>
-            <option>Faculty / Staff</option>
-            <option>Other</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Purpose of Visit</label>
-          <select id="fPurpose">
-            <option value="">Purpose</option>
-            <option>Research</option>
-            <option>Assignment</option>
-            <option>Thesis / Dissertation</option>
-            <option>Leisure Reading</option>
-            <option>Professional Development</option>
-            <option>Others</option>
-          </select>
-        </div>
+      <div class="form-group">
+        <label>Purpose of Visit</label>
+        <select id="fPurpose">
+          <option value="">Purpose</option>
+          <option>Research</option>
+          <option>Assignment</option>
+          <option>Thesis / Dissertation</option>
+          <option>Leisure Reading</option>
+          <option>Professional Development</option>
+          <option>Others</option>
+        </select>
       </div>
       <div class="modal-footer">
         <button class="btn-cancel" onclick="closeModal()">Cancel</button>
