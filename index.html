@@ -4,9 +4,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SHC Library Portal — Sacred Heart College Lucena City</title>
+  <title>SHC Library Portal — Sacred Heart College Lucena City, Inc.</title>
   <link rel="stylesheet" href="index-styles.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
 </head>
 
 <body>
@@ -17,17 +19,24 @@
       <div class="hero-inner">
         <!-- SHC College Logo -->
         <div class="hero-logo-wrap">
-          <img src="/img/SHC logo.png" alt="Sacred Heart College of Lucena City Logo" class="hero-logo-img" />
+          <a href="https://shc.edu.ph/" target="_blank" title="Visit Sacred Heart College of Lucena City Website">
+            <img src="/img/SHC logo.png" alt="Sacred Heart College of Lucena City Logo" class="hero-logo-img"  />
+          </a>
         </div>
         <div class="hero-copy">
           <div class="hero-eyebrow">Library &amp; Audio Visual Resource Center</div>
           <h1 class="hero-title">Sacred Heart College of Lucena City, Inc.</h1>
           <p class="hero-subtitle">Your gateway to academic e-resources, digital libraries, and learning tools</p>
         </div>
+        <!-- DSLMES Logo -->
+        <div class="hero-logo-wrap hero-logo-dslmes">
+          <img src="/img/Dslmes.png" alt="DSLMES Logo" class="hero-logo-img" />
+        </div>
         <!-- Library & AVRC Logo -->
         <div class="hero-logo-wrap">
           <img src="/img/Library Logo.png" alt="SHC Library and AVRC Logo" class="hero-logo-img" />
         </div>
+        
         <div class="hero-right">
           <span class="hero-pill gold">AY 2025–2026</span>
           <span class="hero-pill">E-Resources</span>
@@ -40,9 +49,8 @@
       <div class="nav-inner">
         <div class="nav-links">
           <a class="active" id="nav-home" onclick="showPage('home')">Home</a>
-          <a id="nav-admin" onclick="showPage('admin')">Admin Dashboard</a>
-          <a href="#">Catalog</a>
-          <a href="#">Contacts</a>
+          <a id="nav-admin" onclick="showPage('admin'); loadVisits();">Admin Dashboard</a>
+          <a id="nav-contacts" onclick="showPage('contacts')">Contacts</a>
         </div>
       </div>
     </nav>
@@ -307,6 +315,42 @@
 
         <div class="admin-toolbar">
           <input type="text" id="searchLog" placeholder="Search name, ID, course..." oninput="filterTable()" />
+          
+          <!-- Sorting Controls -->
+          <div class="sort-controls">
+            <select id="sortBy" onchange="sortTable()">
+              <option value="">Sort by...</option>
+              <option value="name">Name</option>
+              <option value="date">Date</option>
+              <option value="course">Course</option>
+            </select>
+            <select id="sortOrder" onchange="sortTable()">
+              <option value="desc">Newest First</option>
+              <option value="asc">Oldest First</option>
+            </select>
+            <select id="filterMonth" onchange="filterTable()">
+              <option value="">All Months</option>
+              <option value="01">January</option>
+              <option value="02">February</option>
+              <option value="03">March</option>
+              <option value="04">April</option>
+              <option value="05">May</option>
+              <option value="06">June</option>
+              <option value="07">July</option>
+              <option value="08">August</option>
+              <option value="09">September</option>
+              <option value="10">October</option>
+              <option value="11">November</option>
+              <option value="12">December</option>
+            </select>
+            <select id="filterYear" onchange="filterTable()">
+              <option value="">All Years</option>
+              <option value="2024">2024</option>
+              <option value="2025">2025</option>
+              <option value="2026">2026</option>
+            </select>
+          </div>
+          
           <select id="filterRes" onchange="filterTable()">
             <option value="">All Resources</option>
             <option>ProQuest Ebook Central</option>
@@ -335,6 +379,12 @@
               <path d="M12 16l-4-4h3V4h2v8h3l-4 4zm-7 4h14v-2H5v2z" />
             </svg>
             Download CSV
+          </button>
+          <button class="btn-toolbar btn-pdf" onclick="exportPDF()">
+            <svg viewBox="0 0 24 24">
+              <path d="M8.5 2H15.5L19 5.5V22H5V2H8.5ZM15 3.5V7H18.5L15 3.5ZM7 4V20H17V9H13V4H7ZM9 12H11V18H9V12ZM13 10H15V18H13V10Z"/>
+            </svg>
+            Download PDF
           </button>
         </div>
 
@@ -384,12 +434,24 @@
                   <option value="today">Today</option>
                 </select>
               </div>
+              <div class="analytics-sort-wrap">
+                <label class="rp-label">Sort Charts</label>
+                <select id="analyticsSortBy" onchange="renderAllCharts()">
+                  <option value="count">By Count</option>
+                  <option value="name">By Name</option>
+                  <option value="recent">Most Recent</option>
+                </select>
+                <select id="analyticsSortOrder" onchange="renderAllCharts()">
+                  <option value="desc">High to Low</option>
+                  <option value="asc">Low to High</option>
+                </select>
+              </div>
               <button class="btn-report btn-report-csv" onclick="downloadReportCSV()">
                 <svg viewBox="0 0 24 24">
                   <path d="M12 16l-4-4h3V4h2v8h3l-4 4zm-7 4h14v-2H5v2z" />
                 </svg>Export CSV
               </button>
-              <button class="btn-report btn-report-pdf" onclick="downloadReportPDF()">
+              <button class="btn-report btn-report-pdf" onclick="openPdfExportModal()">
                 <svg viewBox="0 0 24 24">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                   <polyline points="14 2 14 8 20 8" />
@@ -491,6 +553,69 @@
       </div>
     </div>
 
+    <!-- ════════════════════════
+       CONTACTS PAGE
+  ════════════════════════ -->
+    <div class="page" id="page-contacts">
+      <div class="contacts-content">
+        <div class="section-hd">
+          <span class="section-hd-title">Contact Information</span>
+          <div class="section-hd-line"></div>
+        </div>
+
+        <div class="contacts-grid">
+          <div class="contact-card">
+            <div class="contact-icon">
+              <svg viewBox="0 0 24 24">
+                <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+              </svg>
+            </div>
+            <div class="contact-info">
+              <h3>Email</h3>
+              <p>shclibrary@shc.edu.ph</p>
+            </div>
+          </div>
+
+          <div class="contact-card">
+            <div class="contact-icon">
+              <svg viewBox="0 0 24 24">
+                <path d="M6.62 10.79c1.44 2.83 3.76 5.15 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+              </svg>
+            </div>
+            <div class="contact-info">
+              <h3>Mobile Numbers</h3>
+              <p>09300846314<br></p>
+            </div>
+          </div>
+
+          <div class="contact-card">
+            <div class="contact-icon">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+              </svg>
+            </div>
+            <div class="contact-info">
+              <h3>Website</h3>
+              <p>shc.edu.ph</p>
+            </div>
+          </div>
+
+          <div class="contact-card">
+            <div class="contact-icon">
+              <svg viewBox="0 0 24 24">
+                <path d="M5 3v4h14V3H5zm0 6v10h14V9H5zm2 2h10v6H7v-6z"/>
+                <path d="M0 0h24v24H0z" fill="none"/>
+              </svg>
+            </div>
+            <div class="contact-info">
+              <h3>Facebook Page</h3>
+              <p>IMC Cordian</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <footer class="footer">
       <p><strong>Sacred Heart College Lucena City, Inc.</strong> — Library Resource Center &nbsp;·&nbsp; All rights
         reserved &copy; 2026</p>
@@ -519,30 +644,41 @@
       </div>
       <div class="form-group"><label>ID Number</label><input type="text" id="fID" placeholder="e.g. 2024-00123" /></div>
       <div class="form-group">
-        <label>Course / Department</label>
-        <select id="fCourse">
-          <option value="">— Select your course —</option>
-          <option>Bachelor of Science in Nursing</option>
-          <option>Bachelor of Science in Pharmacy</option>
-          <option>Bachelor of Elementary Education</option>
-          <option>Bachelor of Secondary Education</option>
-          <option>Bachelor of Science in Accountancy</option>
-          <option>Bachelor of Science in Business Administration</option>
-          <option>Bachelor of Science in Computer Science</option>
-          <option>Bachelor of Science in Management Accounting</option>
-          <option>Bachelor of Science in Psychology</option>
-          <option>Bachelor of Science in Social Work</option>
-          <option>Bachelor of Arts in Communication</option>
-          <option>BED - Elementary</option>
-          <option>BED - Junior Highschool Student</option>
-          <option>BED - Senior Highschool</option>
-          <option>BED Faculty</option>
-          <option>HED Faculty</option>
-          <option>GS Faculty</option>
-          <option>Graduate School Student (MAED)</option>
-          <option>Graduate School Student (MSN)</option>
-          <option>Other</option>
-        </select>
+        <label>Course / Department (Select all that apply)</label>
+        <div class="checkbox-group" id="courseCheckboxes">
+          <div class="checkbox-item"><input type="checkbox" id="course-nursing" value="Bachelor of Science in Nursing"><label for="course-nursing">Bachelor of Science in Nursing</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-pharmacy" value="Bachelor of Science in Pharmacy"><label for="course-pharmacy">Bachelor of Science in Pharmacy</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-elem-ed" value="Bachelor of Elementary Education"><label for="course-elem-ed">Bachelor of Elementary Education</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-sec-ed" value="Bachelor of Secondary Education"><label for="course-sec-ed">Bachelor of Secondary Education</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-accountancy" value="Bachelor of Science in Accountancy"><label for="course-accountancy">Bachelor of Science in Accountancy</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-business-admin" value="Bachelor of Science in Business Administration"><label for="course-business-admin">Bachelor of Science in Business Administration</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-computer-science" value="Bachelor of Science in Computer Science"><label for="course-computer-science">Bachelor of Science in Computer Science</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-mgmt-accounting" value="Bachelor of Science in Management Accounting"><label for="course-mgmt-accounting">Bachelor of Science in Management Accounting</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-psychology" value="Bachelor of Science in Psychology"><label for="course-psychology">Bachelor of Science in Psychology</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-social-work" value="Bachelor of Science in Social Work"><label for="course-social-work">Bachelor of Science in Social Work</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-communication" value="Bachelor of Arts in Communication"><label for="course-communication">Bachelor of Arts in Communication</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-bed-elementary" value="BED - Elementary"><label for="course-bed-elementary">BED - Elementary</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-bed-jhs" value="BED - Junior Highschool Student"><label for="course-bed-jhs">BED - Junior Highschool Student</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-bed-shs" value="BED - Senior Highschool"><label for="course-bed-shs">BED - Senior Highschool</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-bed-faculty" value="BED Faculty"><label for="course-bed-faculty">BED Faculty</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-hed-bsn" value="HED Faculty - BSN"><label for="course-hed-bsn">HED Faculty - BSN</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-hed-pharmacy" value="HED Faculty - BSPharmacy"><label for="course-hed-pharmacy">HED Faculty - BSPharmacy</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-hed-education" value="HED Faculty - BSEducation"><label for="course-hed-education">HED Faculty - BSEducation</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-hed-bsa" value="HED Faculty - BSA"><label for="course-hed-bsa">HED Faculty - BSA</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-hed-bsba" value="HED Faculty - BSBA"><label for="course-hed-bsba">HED Faculty - BSBA</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-hed-bsma" value="HED Faculty - BSMA"><label for="course-hed-bsma">HED Faculty - BSMA</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-hed-bscs" value="HED Faculty - BSCS"><label for="course-hed-bscs">HED Faculty - BSCS</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-hed-bsp" value="HED Faculty - BSP"><label for="course-hed-bsp">HED Faculty - BSP</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-hed-bssw" value="HED Faculty - BSSW"><label for="course-hed-bssw">HED Faculty - BSSW</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-hed-abcom" value="HED Faculty - ABCOM"><label for="course-hed-abcom">HED Faculty - ABCOM</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-gs-maed" value="GS Faculty - MAED"><label for="course-gs-maed">GS Faculty - MAED</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-gs-msn" value="GS Faculty - MSN"><label for="course-gs-msn">GS Faculty - MSN</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-gs-other" value="GS Faculty - Other"><label for="course-gs-other">GS Faculty - Other</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-grad-maed" value="Graduate School Student (MAED)"><label for="course-grad-maed">Graduate School Student (MAED)</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-grad-msn" value="Graduate School Student (MSN)"><label for="course-grad-msn">Graduate School Student (MSN)</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-ntp" value="NTP"><label for="course-ntp">NTP</label></div>
+          <div class="checkbox-item"><input type="checkbox" id="course-other" value="Other"><label for="course-other">Other</label></div>
+        </div>
       </div>
       <div class="form-group">
         <label>Purpose of Visit</label>
@@ -553,12 +689,148 @@
           <option>Thesis / Dissertation</option>
           <option>Leisure Reading</option>
           <option>Professional Development</option>
-          <option>Others</option>
-        </select>
+          </select>
       </div>
       <div class="modal-footer">
         <button class="btn-cancel" onclick="closeModal()">Cancel</button>
         <button class="btn-submit" id="submitBtn" onclick="submitForm()">Proceed to Resource</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PDF EXPORT OPTIONS MODAL -->
+  <div class="overlay" id="pdfExportOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-hicon">
+          <svg viewBox="0 0 24 24">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+        </div>
+        <h2>Export PDF Report</h2>
+        <p>Customize your PDF report with filters and sorting options</p>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Report Title</label>
+          <input type="text" id="pdfTitle" placeholder="e.g. January 2026 Library Report" />
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Filter by Month</label>
+            <select id="pdfMonth">
+              <option value="">All Months</option>
+              <option value="01">January</option>
+              <option value="02">February</option>
+              <option value="03">March</option>
+              <option value="04">April</option>
+              <option value="05">May</option>
+              <option value="06">June</option>
+              <option value="07">July</option>
+              <option value="08">August</option>
+              <option value="09">September</option>
+              <option value="10">October</option>
+              <option value="11">November</option>
+              <option value="12">December</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Filter by Year</label>
+            <select id="pdfYear">
+              <option value="">All Years</option>
+              <option value="2024">2024</option>
+              <option value="2025">2025</option>
+              <option value="2026">2026</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Filter by Specific Date</label>
+          <input type="date" id="pdfDate" />
+        </div>
+
+        <div class="form-group">
+          <label>Filter by Course/Department</label>
+          <select id="pdfCourse">
+            <option value="">All Courses</option>
+            <option>Bachelor of Science in Nursing</option>
+            <option>Bachelor of Science in Pharmacy</option>
+            <option>Bachelor of Elementary Education</option>
+            <option>Bachelor of Secondary Education</option>
+            <option>Bachelor of Science in Accountancy</option>
+            <option>Bachelor of Science in Business Administration</option>
+            <option>Bachelor of Science in Computer Science</option>
+            <option>Bachelor of Science in Management Accounting</option>
+            <option>Bachelor of Science in Psychology</option>
+            <option>Bachelor of Science in Social Work</option>
+            <option>Bachelor of Arts in Communication</option>
+            <option>BED - Elementary</option>
+            <option>BED - Junior Highschool Student</option>
+            <option>BED - Senior Highschool</option>
+            <option>BED Faculty</option>
+            <option>HED Faculty - BSN</option>
+            <option>HED Faculty - BSPharmacy</option>
+            <option>HED Faculty - BSEducation</option>
+            <option>HED Faculty - BSA</option>
+            <option>HED Faculty - BSBA</option>
+            <option>HED Faculty - BSMA</option>
+            <option>HED Faculty - BSCS</option>
+            <option>HED Faculty - BSP</option>
+            <option>HED Faculty - BSSW</option>
+            <option>HED Faculty - ABCOM</option>
+            <option>GS Faculty - MAED</option>
+            <option>GS Faculty - MSN</option>
+            <option>GS Faculty - Other</option>
+            <option>Graduate School Student (MAED)</option>
+            <option>Graduate School Student (MSN)</option>
+            <option>NTP</option>
+            <option>Other</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Sort Data By</label>
+            <select id="pdfSortBy">
+              <option value="date">Date & Time</option>
+              <option value="name">Name</option>
+              <option value="course">Course</option>
+              <option value="resource">Resource</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Sort Order</label>
+            <select id="pdfSortOrder">
+              <option value="desc">Newest/Oldest First</option>
+              <option value="asc">Oldest/Newest First</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Include Analytics Summary</label>
+          <div class="checkbox-group">
+            <div class="checkbox-item">
+              <input type="checkbox" id="pdfIncludeSummary" checked>
+              <label for="pdfIncludeSummary">Include executive summary and KPIs</label>
+            </div>
+            <div class="checkbox-item">
+              <input type="checkbox" id="pdfIncludeCharts" checked>
+              <label for="pdfIncludeCharts">Include resource and course rankings</label>
+            </div>
+            <div class="checkbox-item">
+              <input type="checkbox" id="pdfIncludeLog" checked>
+              <label for="pdfIncludeLog">Include detailed visitor log</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closePdfExportModal()">Cancel</button>
+        <button class="btn-submit" onclick="generateFilteredPDF()">Generate PDF</button>
       </div>
     </div>
   </div>

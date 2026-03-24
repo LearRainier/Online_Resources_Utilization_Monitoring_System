@@ -187,6 +187,8 @@ function filterTable() {
   let s = document.getElementById('searchLog').value.toLowerCase();
   let r = document.getElementById('filterRes').value;
   let d = document.getElementById('filterDate').value;
+  let m = document.getElementById('filterMonth').value;
+  let y = document.getElementById('filterYear').value;
   let today = new Date().toISOString().slice(0, 10);
   let week = new Date();
   week.setDate(week.getDate() - 7);
@@ -198,8 +200,68 @@ function filterTable() {
     if (d === 'today' && !(e.visited_at || '').startsWith(today)) return false;
     if (d === 'week' && new Date(e.visited_at) < week) return false;
     if (d === 'month' && new Date(e.visited_at) < month) return false;
+    if (m && e.visited_at && new Date(e.visited_at).getMonth() + 1 !== parseInt(m)) return false;
+    if (y && e.visited_at && new Date(e.visited_at).getFullYear() !== parseInt(y)) return false;
     return true;
   });
+  renderTableData(f);
+}
+
+function sortTable() {
+  let sortBy = document.getElementById('sortBy').value;
+  let sortOrder = document.getElementById('sortOrder').value;
+  
+  if (!sortBy) {
+    filterTable(); // Just re-filter without sorting
+    return;
+  }
+  
+  let s = document.getElementById('searchLog').value.toLowerCase();
+  let r = document.getElementById('filterRes').value;
+  let d = document.getElementById('filterDate').value;
+  let m = document.getElementById('filterMonth').value;
+  let y = document.getElementById('filterYear').value;
+  let today = new Date().toISOString().slice(0, 10);
+  let week = new Date();
+  week.setDate(week.getDate() - 7);
+  let month = new Date();
+  month.setDate(1);
+  let f = allVisits.filter(e => {
+    if (s && !((e.name || '').toLowerCase().includes(s) || (e.id_number || '').toLowerCase().includes(s) || (e.course || '').toLowerCase().includes(s))) return false;
+    if (r && e.resource !== r) return false;
+    if (d === 'today' && !(e.visited_at || '').startsWith(today)) return false;
+    if (d === 'week' && new Date(e.visited_at) < week) return false;
+    if (d === 'month' && new Date(e.visited_at) < month) return false;
+    if (m && e.visited_at && new Date(e.visited_at).getMonth() + 1 !== parseInt(m)) return false;
+    if (y && e.visited_at && new Date(e.visited_at).getFullYear() !== parseInt(y)) return false;
+    return true;
+  });
+  
+  // Sort the filtered data
+  f.sort((a, b) => {
+    let aVal, bVal;
+    switch (sortBy) {
+      case 'name':
+        aVal = (a.name || '').toLowerCase();
+        bVal = (b.name || '').toLowerCase();
+        break;
+      case 'date':
+        aVal = new Date(a.visited_at || 0);
+        bVal = new Date(b.visited_at || 0);
+        break;
+      case 'course':
+        aVal = (a.course || '').toLowerCase();
+        bVal = (b.course || '').toLowerCase();
+        break;
+      default:
+        return 0;
+    }
+    
+    if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+    return 0;
+  });
+  
   renderTableData(f);
 }
 
@@ -252,6 +314,61 @@ function exportCSV() {
   showToast('CSV downloaded! ' + allVisits.length + ' records exported.');
 }
 
+function exportPDF() {
+  if (allVisits.length === 0) {
+    showToast('No data to export.');
+    return;
+  }
+  
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  
+  // Add header
+  doc.setFontSize(20);
+  doc.text('SHC Library Visitor Log', 20, 30);
+  doc.setFontSize(12);
+  doc.text('Sacred Heart College Lucena City, Inc.', 20, 40);
+  doc.text('Generated on: ' + new Date().toLocaleString(), 20, 50);
+  doc.text('Total Records: ' + allVisits.length, 20, 60);
+  
+  // Prepare table data
+  const headers = [['#', 'Name', 'ID Number', 'Course', 'Purpose', 'Resource', 'Date & Time']];
+  const rows = allVisits.map((e, i) => [
+    i + 1,
+    e.name || '',
+    e.id_number || '',
+    e.course || '',
+    e.purpose || '',
+    e.resource || '',
+    e.visited_at ? new Date(e.visited_at).toLocaleString() : ''
+  ]);
+  
+  // Add table
+  doc.autoTable({
+    head: headers,
+    body: rows,
+    startY: 70,
+    styles: {
+      fontSize: 8,
+      cellPadding: 2,
+    },
+    headStyles: {
+      fillColor: [185, 28, 28], // Crimson color
+      textColor: 255,
+      fontStyle: 'bold',
+    },
+    alternateRowStyles: {
+      fillColor: [245, 245, 245],
+    },
+    margin: { top: 70 },
+  });
+  
+  // Save the PDF
+  const filename = 'SHC_Library_Visitor_Log_' + new Date().toISOString().slice(0, 10) + '.pdf';
+  doc.save(filename);
+  showToast('PDF downloaded! ' + allVisits.length + ' records exported.');
+}
+
 async function saveConfig() {
   let url = document.getElementById('cfgUrl').value.trim().replace(/\/$/, '');
   let key = document.getElementById('cfgKey').value.trim();
@@ -299,17 +416,23 @@ function openModal(name, url) {
 function closeModal() {
   document.getElementById('overlay').classList.remove('active');
   ['fLastName', 'fFirstName', 'fID'].forEach(id => document.getElementById(id).value = '');
-  ['fCourse', 'fPurpose'].forEach(id => document.getElementById(id).value = '');
+  // Clear checkboxes
+  document.querySelectorAll('#courseCheckboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
+  ['fPurpose'].forEach(id => document.getElementById(id).value = '');
 }
 
 async function submitForm() {
   let ln = document.getElementById('fLastName').value.trim();
   let fn = document.getElementById('fFirstName').value.trim();
   let id = document.getElementById('fID').value.trim();
-  let course = document.getElementById('fCourse').value;
+  
+  // Get selected courses
+  let selectedCourses = Array.from(document.querySelectorAll('#courseCheckboxes input[type="checkbox"]:checked')).map(cb => cb.value);
+  let course = selectedCourses.join(', ');
+  
   let purpose = document.getElementById('fPurpose').value;
-  if (!ln || !fn || !course) {
-    showToast('Please fill in Last Name, First Name, and Course.');
+  if (!ln || !fn || selectedCourses.length === 0) {
+    showToast('Please fill in Last Name, First Name, and select at least one Course.');
     return;
   }
   let entry = {
@@ -343,6 +466,9 @@ function showToast(msg) {
 document.getElementById('overlay').addEventListener('click', function (e) {
   if (e.target === this) closeModal();
 });
+document.getElementById('pdfExportOverlay').addEventListener('click', function (e) {
+  if (e.target === this) closePdfExportModal();
+});
 document.getElementById('adminPwd').addEventListener('keydown', function (e) {
   if (e.key === 'Enter') checkLogin();
 });
@@ -375,6 +501,27 @@ function countBy(arr, key) {
   return Object.entries(map).sort((a,b) => b[1]-a[1]);
 }
 
+/* ── Disseminate courses for analytics ── */
+function disseminateCourses(data) {
+  // This function expands records with multiple courses into separate entries for analytics
+  // E.g., if a record has "BSN, BSCS", it creates two virtual entries for analytics
+  // But the original record remains unchanged in the visitor log
+  const disseminated = [];
+  data.forEach(entry => {
+    if (entry.course && entry.course.includes(',')) {
+      // Split multiple courses and create separate entries for each
+      const courses = entry.course.split(',').map(c => c.trim());
+      courses.forEach(course => {
+        disseminated.push({ ...entry, course: course });
+      });
+    } else {
+      // Single course or no course, add as-is
+      disseminated.push(entry);
+    }
+  });
+  return disseminated;
+}
+
 function destroyChart(ref) { try { if (ref) ref.destroy(); } catch(e) {} return null; }
 
 function renderAllCharts() {
@@ -385,20 +532,67 @@ function renderAllCharts() {
     return;
   }
   if (emptyEl) emptyEl.style.display = 'none';
-  updateKPIs(data);
+  
+  // Use disseminated courses for course-based analytics
+  const disseminatedData = disseminateCourses(data);
+  
+  updateKPIs(data, disseminatedData);
   renderResourceChart(data);
   renderDailyChart(data);
-  renderDeptChart(data);
+  renderDeptChart(disseminatedData);
   renderPurposeChart(data);
-  renderRankingTable('rankCourse',   countBy(data,'course'),   'course');
-  renderRankingTable('rankResource', countBy(data,'resource'), 'resource');
+  renderRankingTable('rankCourse',   getSortedEntries(disseminatedData, 'course'),   'course');
+  renderRankingTable('rankResource', getSortedEntries(data, 'resource'), 'resource');
 }
 
-function updateKPIs(data) {
+function getSortedEntries(data, field) {
+  const sortBy = document.getElementById('analyticsSortBy').value;
+  const sortOrder = document.getElementById('analyticsSortOrder').value;
+  
+  let entries = countBy(data, field);
+  
+  entries.sort((a, b) => {
+    let aVal, bVal;
+    
+    switch (sortBy) {
+      case 'count':
+        aVal = a[1];
+        bVal = b[1];
+        break;
+      case 'name':
+        aVal = (a[0] || '').toLowerCase();
+        bVal = (b[0] || '').toLowerCase();
+        break;
+      case 'recent':
+        // For recent sorting, we need to find the most recent visit date for each item
+        const getRecentDate = (item) => {
+          const itemData = data.filter(d => d[field] === item);
+          return itemData.length > 0 ? new Date(Math.max(...itemData.map(d => new Date(d.visited_at)))) : new Date(0);
+        };
+        aVal = getRecentDate(a[0]);
+        bVal = getRecentDate(b[0]);
+        break;
+      default:
+        aVal = a[1];
+        bVal = b[1];
+    }
+    
+    if (sortOrder === 'asc') {
+      return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+    } else {
+      return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
+    }
+  });
+  
+  return entries;
+}
+
+function updateKPIs(data, disseminatedData) {
   const safe = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
   safe('kpi-total', data.length);
   safe('kpi-days',  new Set(data.map(e=>e.visited_at.slice(0,10))).size);
-  safe('kpi-courses', new Set(data.map(e=>e.course).filter(Boolean)).size);
+  // Count unique courses from original data
+  safe('kpi-courses', new Set(data.map(e=>e.course).filter(Boolean).flatMap(c => c.split(',').map(x => x.trim()))).size);
   const top = countBy(data,'resource')[0];
   safe('kpi-top-res', top ? top[0].split(' ').slice(0,2).join(' ') : '—');
 }
@@ -407,7 +601,7 @@ function renderResourceChart(data) {
   const ctx = document.getElementById('chartResource'); if(!ctx) return;
   _chartRes = destroyChart(_chartRes);
   const SHORT = {'ProQuest Ebook Central':'PQ Ebook','ProQuest Research Library':'PQ Research','World Book Online':'World Book','3G E-Learning':'3G Learn','Kite Academy':'Kite','Encleare (GEAP)':'Encleare','Library and AVRC Utilization Guide':'AVRC Guide'};
-  const entries = countBy(data,'resource').slice(0,7);
+  const entries = getSortedEntries(data, 'resource').slice(0,7);
   _chartRes = new Chart(ctx, {
     type:'bar',
     data:{ labels:entries.map(([k])=>SHORT[k]||k.split(' ').slice(0,2).join(' ')), datasets:[{label:'Visits',data:entries.map(([,v])=>v),backgroundColor:PALETTE_BAR,borderRadius:6,borderSkipped:false}]},
@@ -432,7 +626,7 @@ function renderDeptChart(data) {
   const ctx = document.getElementById('chartDept'); if(!ctx) return;
   _chartDept = destroyChart(_chartDept);
   const ABBR = {'Bachelor of Arts':'BA','Bachelor of Science in Nursing':'BSN','Bachelor of Science in Education':'BSEd','Bachelor of Science in Accountancy':'BSA','Bachelor of Science in Business Administration':'BSBA','Bachelor of Science in Computer Science':'BSCS','Bachelor of Science in Information Technology':'BSIT','Bachelor of Science in Social Work':'BSSW','Senior High School':'SHS','Faculty / Staff':'Faculty','Graduate School':'Grad School'};
-  const entries = countBy(data,'course').slice(0,8);
+  const entries = getSortedEntries(data, 'course').slice(0,8);
   _chartDept = new Chart(ctx, {
     type:'bar',
     data:{ labels:entries.map(([k])=>ABBR[k]||k.split(' ').slice(0,3).join(' ')), datasets:[{label:'Visits',data:entries.map(([,v])=>v),backgroundColor:PALETTE_BAR,borderRadius:5,borderSkipped:false}]},
@@ -443,7 +637,7 @@ function renderDeptChart(data) {
 function renderPurposeChart(data) {
   const ctx = document.getElementById('chartPurpose'); if(!ctx) return;
   _chartPurpose = destroyChart(_chartPurpose);
-  const entries = countBy(data,'purpose').slice(0,6);
+  const entries = getSortedEntries(data, 'purpose').slice(0,6);
   _chartPurpose = new Chart(ctx, {
     type:'doughnut',
     data:{ labels:entries.map(([k])=>k||'Unknown'), datasets:[{data:entries.map(([,v])=>v),backgroundColor:['#1E3A5F','#B91C1C','#C9952A','#166534','#7C2D12','#6B21A8'],borderWidth:2,borderColor:'#fff'}]},
@@ -578,4 +772,221 @@ function downloadReportPDF() {
   const win  = window.open(url,'_blank');
   if(win) win.onload = () => setTimeout(()=>win.print(), 500);
   showToast("Report opened — Print → Save as PDF.");
+}
+
+/* ── PDF Export Modal ── */
+function openPdfExportModal() {
+  // Reset form values
+  document.getElementById('pdfTitle').value = '';
+  document.getElementById('pdfMonth').value = '';
+  document.getElementById('pdfYear').value = '';
+  document.getElementById('pdfDate').value = '';
+  document.getElementById('pdfCourse').value = '';
+  document.getElementById('pdfSortBy').value = 'date';
+  document.getElementById('pdfSortOrder').value = 'desc';
+  document.getElementById('pdfIncludeSummary').checked = true;
+  document.getElementById('pdfIncludeCharts').checked = true;
+  document.getElementById('pdfIncludeLog').checked = true;
+  
+  // Show modal
+  document.getElementById('pdfExportOverlay').classList.add('active');
+}
+
+function closePdfExportModal() {
+  document.getElementById('pdfExportOverlay').classList.remove('active');
+}
+
+function generateFilteredPDF() {
+  // Get filter values
+  const title = document.getElementById('pdfTitle').value.trim() || 'Library Usage Report';
+  const month = document.getElementById('pdfMonth').value;
+  const year = document.getElementById('pdfYear').value;
+  const date = document.getElementById('pdfDate').value;
+  const course = document.getElementById('pdfCourse').value;
+  const sortBy = document.getElementById('pdfSortBy').value;
+  const sortOrder = document.getElementById('pdfSortOrder').value;
+  const includeSummary = document.getElementById('pdfIncludeSummary').checked;
+  const includeCharts = document.getElementById('pdfIncludeCharts').checked;
+  const includeLog = document.getElementById('pdfIncludeLog').checked;
+  
+  // Get base filtered data (from analytics period)
+  let data = getFilteredVisits();
+  
+  // Apply additional filters
+  data = data.filter(entry => {
+    if (month && entry.visited_at) {
+      const entryMonth = new Date(entry.visited_at).getMonth() + 1;
+      if (entryMonth !== parseInt(month)) return false;
+    }
+    if (year && entry.visited_at) {
+      const entryYear = new Date(entry.visited_at).getFullYear();
+      if (entryYear !== parseInt(year)) return false;
+    }
+    if (date && entry.visited_at) {
+      const entryDate = entry.visited_at.slice(0, 10);
+      if (entryDate !== date) return false;
+    }
+    if (course && entry.course !== course) return false;
+    return true;
+  });
+  
+  if (!data.length) {
+    showToast('No data matches the selected filters.');
+    return;
+  }
+  
+  // Sort the data
+  data.sort((a, b) => {
+    let aVal, bVal;
+    switch (sortBy) {
+      case 'date':
+        aVal = new Date(a.visited_at || 0);
+        bVal = new Date(b.visited_at || 0);
+        break;
+      case 'name':
+        aVal = (a.name || '').toLowerCase();
+        bVal = (b.name || '').toLowerCase();
+        break;
+      case 'course':
+        aVal = (a.course || '').toLowerCase();
+        bVal = (b.course || '').toLowerCase();
+        break;
+      case 'resource':
+        aVal = (a.resource || '').toLowerCase();
+        bVal = (b.resource || '').toLowerCase();
+        break;
+      default:
+        aVal = new Date(a.visited_at || 0);
+        bVal = new Date(b.visited_at || 0);
+    }
+    
+    if (sortOrder === 'asc') {
+      return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+    } else {
+      return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
+    }
+  });
+  
+  // Generate filter description
+  let filterDesc = [];
+  if (month) filterDesc.push(`Month: ${new Date(2024, parseInt(month)-1, 1).toLocaleString('default', { month: 'long' })}`);
+  if (year) filterDesc.push(`Year: ${year}`);
+  if (date) filterDesc.push(`Date: ${new Date(date).toLocaleDateString()}`);
+  if (course) filterDesc.push(`Course: ${course}`);
+  const filterText = filterDesc.length > 0 ? ` (${filterDesc.join(', ')})` : '';
+  
+  // Generate PDF
+  generateCustomPDF(data, title, filterText, includeSummary, includeCharts, includeLog, sortBy);
+  
+  // Close modal
+  closePdfExportModal();
+}
+
+function generateCustomPDF(data, title, filterText, includeSummary, includeCharts, includeLog, sortBy) {
+  const now = new Date();
+  const disseminatedData = disseminateCourses(data);
+  const resCounts  = countBy(data,'resource');
+  const crseCounts = countBy(disseminatedData,'course');
+  const purpCounts = countBy(data,'purpose');
+  const uniqueDays = new Set(data.map(e=>e.visited_at.slice(0,10))).size;
+  const uniqueCrs  = new Set(disseminatedData.map(e=>e.course).filter(Boolean)).size;
+  const topRes = resCounts[0];
+  
+  // Sort data for table display
+  const sortedData = [...data];
+  const tblRows = sortedData.slice(0,500).map((e,i)=>`<tr style="background:${i%2===0?'#fff':'#f9f8f6'}"><td>${i+1}</td><td><strong>${e.name||'—'}</strong></td><td style="font-family:monospace;font-size:11px;">${e.id_number||'—'}</td><td>${e.course||'—'}</td><td>${e.purpose||'—'}</td><td>${e.resource||'—'}</td><td style="font-size:11px;">${e.visited_at?new Date(e.visited_at).toLocaleString():'—'}</td></tr>`).join('');
+  
+  const mkRank = (arr,limit=10) => arr.slice(0,limit).map(([n,c],i)=>`<tr><td style="width:28px;font-weight:700;color:#B91C1C;">${i+1}</td><td>${n}</td><td style="text-align:right;font-weight:700;color:#1E3A5F;">${c}</td></tr>`).join('');
+  const mkSplit = (arr) => arr.map(([n,c])=>`<tr><td>${n||'Unknown'}</td><td style="text-align:right;font-weight:700;">${c}</td><td style="text-align:right;color:#78716C;">${Math.round(c/data.length*100)}%</td></tr>`).join('');
+
+  let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title>
+  <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#1C1917;font-size:13px;}
+  .cover{background:linear-gradient(135deg,#152A47 0%,#1E3A5F 100%);color:#fff;padding:48px;position:relative;overflow:hidden;page-break-after:always;}
+  .cover::after{content:'';position:absolute;right:-60px;top:-60px;width:300px;height:300px;border-radius:50%;background:rgba(185,28,28,0.18);}
+  .logo{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,0.12);border:2px solid rgba(255,255,255,0.22);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;text-align:center;line-height:1.2;margin-bottom:20px;position:relative;z-index:1;}
+  h1{font-size:26px;font-weight:700;line-height:1.2;margin-bottom:6px;position:relative;z-index:1;}
+  h2{font-size:14px;font-weight:400;opacity:.7;margin-bottom:28px;position:relative;z-index:1;}
+  .meta{display:flex;gap:32px;flex-wrap:wrap;position:relative;z-index:1;}
+  .meta-item .lbl{font-size:10px;opacity:.5;text-transform:uppercase;letter-spacing:.8px;}
+  .meta-item .val{font-size:14px;font-weight:600;margin-top:2px;color:#FDE68A;}
+  .body{padding:40px 48px;}
+  .sec{margin-bottom:36px;}
+  .sec-title{font-size:15px;font-weight:700;color:#1E3A5F;border-bottom:2px solid #B91C1C;padding-bottom:6px;margin-bottom:16px;}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}
+  .kpi{background:#F7F6F3;border-radius:8px;padding:16px 18px;border:1px solid #E2DDD8;}
+  .kpi .v{font-size:28px;font-weight:700;color:#1E3A5F;line-height:1;}
+  .kpi .l{font-size:10px;color:#78716C;text-transform:uppercase;letter-spacing:.6px;margin-top:3px;}
+  .summary{font-size:13px;color:#44403C;line-height:1.75;background:#FEF2F2;border-left:4px solid #B91C1C;padding:14px 18px;border-radius:0 8px 8px 0;margin-bottom:8px;}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+  table{width:100%;border-collapse:collapse;font-size:12px;}
+  th{background:#1E3A5F;color:#fff;padding:9px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;}
+  td{padding:8px 12px;border-bottom:1px solid #EDE9E4;vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  .ft{background:#152A47;color:rgba(255,255,255,.45);padding:14px 48px;font-size:11px;display:flex;justify-content:space-between;}
+  @media print{.cover,.kpi,.summary{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}</style></head><body>
+  <div class="cover">
+    <div class="logo">SHC<br>LCI</div>
+    <h1>${title}</h1>
+    <h2>Sacred Heart College — Lucena City, Inc.</h2>
+    <div class="meta">
+      <div class="meta-item"><div class="lbl">Filters</div><div class="val">${filterText || 'All Data'}</div></div>
+      <div class="meta-item"><div class="lbl">Generated</div><div class="val">${now.toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'})}</div></div>
+      <div class="meta-item"><div class="lbl">Time</div><div class="val">${now.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}</div></div>
+      <div class="meta-item"><div class="lbl">Records</div><div class="val">${data.length}</div></div>
+    </div>
+  </div>`;
+
+  if (includeSummary) {
+    html += `
+  <div class="body">
+    <div class="sec">
+      <div class="sec-title">Executive Summary</div>
+      <div class="kpis">
+        <div class="kpi"><div class="v">${data.length}</div><div class="l">Total Visitors</div></div>
+        <div class="kpi"><div class="v">${uniqueDays}</div><div class="l">Active Days</div></div>
+        <div class="kpi"><div class="v">${uniqueCrs}</div><div class="l">Courses Served</div></div>
+        <div class="kpi"><div class="v">${topRes?topRes[1]:0}</div><div class="l">Top Resource Hits</div></div>
+      </div>
+      <div class="summary">This report contains <strong>${data.length} visitor transactions</strong> from <strong>${uniqueCrs} academic courses/departments</strong> over <strong>${uniqueDays} active days</strong>.${topRes?` The most accessed resource was <strong>${topRes[0]}</strong> with <strong>${topRes[1]} visits</strong>.`:''} Data is sorted by <strong>${sortBy === 'date' ? 'date & time' : sortBy}</strong>.</div>
+    </div>`;
+  } else {
+    html += `<div class="body">`;
+  }
+
+  if (includeCharts) {
+    html += `
+    <div class="sec">
+      <div class="sec-title">Resource Utilization &amp; Visit Purpose</div>
+      <div class="two">
+        <table><thead><tr><th>#</th><th>Resource</th><th style="text-align:right">Visits</th></tr></thead><tbody>${mkRank(resCounts)}</tbody></table>
+        <table><thead><tr><th>Purpose</th><th style="text-align:right">Count</th><th style="text-align:right">%</th></tr></thead><tbody>${mkSplit(purpCounts)}</tbody></table>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-title">Visitor Demographics</div>
+      <div class="two">
+        <table><thead><tr><th>#</th><th>Course / Department</th><th style="text-align:right">Visits</th></tr></thead><tbody>${mkRank(crseCounts)}</tbody></table>
+      </div>
+    </div>`;
+  }
+
+  if (includeLog) {
+    html += `
+    <div class="sec">
+      <div class="sec-title">Visitor Log — ${Math.min(data.length,500)} of ${data.length} records</div>
+      <table><thead><tr><th>#</th><th>Name</th><th>ID No.</th><th>Course</th><th>Purpose</th><th>Resource</th><th>Date &amp; Time</th></tr></thead><tbody>${tblRows}</tbody></table>
+      ${data.length>500?'<p style="text-align:center;font-size:11px;color:#78716C;margin-top:10px;">Showing first 500 records. Use Export CSV for full data.</p>':''}
+    </div>`;
+  }
+
+  html += `
+  </div>
+  <div class="ft"><span>Sacred Heart College Lucena City, Inc. — Library Resource Center</span><span>Generated ${now.toLocaleString('en-PH')}</span></div>
+  </body></html>`;
+
+  const blob = new Blob([html],{type:'text/html'});
+  const url  = URL.createObjectURL(blob);
+  const win  = window.open(url,'_blank');
+  if(win) win.onload = () => setTimeout(()=>win.print(), 500);
+  showToast("Filtered report opened — Print → Save as PDF.");
 }
