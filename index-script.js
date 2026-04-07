@@ -413,6 +413,17 @@ function openModal(name, url) {
   document.getElementById('overlay').classList.add('active');
 }
 
+// iPhone-compatible link opener (works better than window.open on mobile)
+function openLink(url) {
+  const link = document.createElement('a');
+  link.href = url;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 function closeModal() {
   document.getElementById('overlay').classList.remove('active');
   ['fLastName', 'fFirstName', 'fID'].forEach(id => document.getElementById(id).value = '');
@@ -453,7 +464,7 @@ async function submitForm() {
   closeModal();
   loadStatsBar();
   showToast('Welcome, ' + fn + '! Opening ' + currentResource + '...');
-  setTimeout(() => { window.open(currentTarget, '_blank'); }, 1000);
+  setTimeout(() => { openLink(currentTarget); }, 1000);
 }
 
 function showToast(msg) {
@@ -769,8 +780,7 @@ function downloadReportPDF() {
 
   const blob = new Blob([html],{type:'text/html'});
   const url  = URL.createObjectURL(blob);
-  const win  = window.open(url,'_blank');
-  if(win) win.onload = () => setTimeout(()=>win.print(), 500);
+  const win  = openLink(url);
   showToast("Report opened — Print → Save as PDF.");
 }
 
@@ -987,6 +997,5 @@ function generateCustomPDF(data, title, filterText, includeSummary, includeChart
   const blob = new Blob([html],{type:'text/html'});
   const url  = URL.createObjectURL(blob);
   const win  = window.open(url,'_blank');
-  if(win) win.onload = () => setTimeout(()=>win.print(), 500);
-  showToast("Filtered report opened — Print → Save as PDF.");
+  if(win) win.oopenLink(url);
 }
