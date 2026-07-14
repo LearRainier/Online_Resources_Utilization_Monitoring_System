@@ -76,7 +76,7 @@ async function loadStatsBar() {
   }
   try {
     let today = new Date().toISOString().slice(0, 10);
-    let all = await sbFetch('visitor_log?select=id,name,resource,visited_at&order=visited_at.desc');
+    let all = await sbFetch('visitor_log?select=id,name,resource,visited_at&order=visited_at.desc&limit=100000');
     if (!all) {
       document.getElementById('dbStatus').innerHTML = '<span class="db-badge db-fail">Connection error</span>';
       return;
@@ -122,14 +122,28 @@ function showPage(p) {
   document.querySelectorAll('.nav-bar a').forEach(x => x.classList.remove('active'));
   document.getElementById('page-' + p).classList.add('active');
   document.getElementById('nav-' + p).classList.add('active');
+  if (p === 'admin') loadVisits();
 }
 
 function checkLogin() {
+  const enteredPwd = document.getElementById('adminPwd').value.trim();
+  const ADMIN_PASSWORD = 'shcadmin'; // TODO: replace with secure method
+  if (enteredPwd !== ADMIN_PASSWORD) {
+    const errEl = document.getElementById('loginError');
+    if (errEl) { errEl.style.display = 'block'; errEl.textContent = 'Incorrect password. Please try again.'; }
+    return;
+  }
+  // Hide login and show dashboard
   document.getElementById('adminLogin').style.display = 'none';
   document.getElementById('adminDash').classList.add('active');
+  // Clear any previous error
+  const errEl = document.getElementById('loginError');
+  if (errEl) errEl.style.display = 'none';
+  // Populate config fields if available
   let c = getCfg();
   if (c.url) document.getElementById('cfgUrl').value = c.url;
   if (c.key) document.getElementById('cfgKey').value = c.key;
+  // Load visitor data
   loadVisits();
 }
 
@@ -151,7 +165,7 @@ async function loadVisits() {
     return;
   }
   try {
-    let data = await sbFetch('visitor_log?select=*&order=visited_at.desc&limit=500');
+    let data = await sbFetch('visitor_log?select=*&order=visited_at.desc&limit=100000');
     if (!data) {
       document.getElementById('logTableBody').innerHTML = '<tr class="loading-row"><td colspan="8">Failed to connect. Check your Supabase URL and key.</td></tr>';
       return;
