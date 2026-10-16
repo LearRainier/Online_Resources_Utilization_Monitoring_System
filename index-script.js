@@ -269,6 +269,11 @@ function checkAdminAccess() {
     isAdminAllowed = true;
     sessionStorage.setItem('admin_session', 'true');
     document.getElementById('nav-admin').style.display = 'inline';
+    // Arrived via the /admin link: go straight to the sign-in screen and tidy the URL
+    params.delete('admin');
+    const rest = params.toString();
+    history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+    showPage('admin');
   } else if (sessionStorage.getItem('admin_session') === 'true') {
     isAdminAllowed = true;
     document.getElementById('nav-admin').style.display = 'inline';
@@ -297,12 +302,53 @@ function isAdminDashActive() {
   return !!dash && dash.classList.contains('active');
 }
 
-function checkLogin() {
+// Returns true, false (wrong password) or an error message
+async function verifyAdminPassword(pwd) {
+  try {
+    // Production: the Netlify Function compares against the ADMIN_PASSWORD env variable
+    const res = await fetch('/api/admin-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd })
+    });
+    if ((res.headers.get('content-type') || '').includes('application/json')) {
+      const data = await res.json();
+      if (res.ok && data.ok) return true;
+      if (res.status === 401) return false;
+      if (data.error) return data.error;
+    }
+  } catch (e) {
+    // Netlify Function not available (local development)
+  }
+  // Local development: compare with config.js
+  const localPwd = window.APP_CONFIG && window.APP_CONFIG.ADMIN_PASSWORD;
+  if (localPwd) return pwd === String(localPwd).trim();
+  return 'Could not verify the password. Check your connection and try again.';
+}
+
+let _checkingLogin = false;
+
+async function checkLogin() {
+  if (_checkingLogin) return;
   const enteredPwd = document.getElementById('adminPwd').value.trim();
-  const ADMIN_PASSWORD = 'shcadmin'; // TODO: replace with secure method
-  if (enteredPwd !== ADMIN_PASSWORD) {
+  const showError = msg => {
     const errEl = document.getElementById('loginError');
-    if (errEl) { errEl.style.display = 'block'; errEl.textContent = 'Incorrect password. Please try again.'; }
+    if (errEl) { errEl.style.display = 'block'; errEl.textContent = msg; }
+  };
+  if (!enteredPwd) { showError('Please enter the password.'); return; }
+
+  const btn = document.querySelector('.btn-login');
+  _checkingLogin = true;
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+  let result;
+  try {
+    result = await verifyAdminPassword(enteredPwd);
+  } finally {
+    _checkingLogin = false;
+    if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; }
+  }
+  if (result !== true) {
+    showError(result === false ? 'Incorrect password. Please try again.' : result);
     return;
   }
   // Hide login and show dashboard

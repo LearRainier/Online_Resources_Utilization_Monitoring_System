@@ -6,5 +6,9 @@ window.APP_CONFIG = {
 
   // Your Supabase Anon Public Key from Project Settings → API
   // Example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-  SUPABASE_KEY: 'your-anon-public-key-here'
+  SUPABASE_KEY: 'your-anon-public-key-here',
+
+  // Admin dashboard password for local testing only.
+  // On Netlify, set ADMIN_PASSWORD in Site settings → Environment variables instead.
+  ADMIN_PASSWORD: 'change-me'
 };

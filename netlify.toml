@@ -11,3 +11,17 @@
   to = "/.netlify/functions/config"
   status = 200
   force = true
+
+# Admin password check runs on the server
+[[redirects]]
+  from = "/api/admin-login"
+  to = "/.netlify/functions/admin-login"
+  status = 200
+  force = true
+
+# Short link for staff: yoursite.netlify.app/admin
+[[redirects]]
+  from = "/admin"
+  to = "/?admin=enabled"
+  status = 302
+  force = true
