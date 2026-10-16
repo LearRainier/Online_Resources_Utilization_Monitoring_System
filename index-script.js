@@ -2,6 +2,122 @@ let currentTarget = '#', currentResource = '';
 let allVisits = [];
 let isAdminAllowed = false;
 
+// Helper for consistent local YYYY-MM-DD date string (prevents UTC timezone drift)
+function getLocalDateString(dateInput) {
+  if (!dateInput) return '';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Comprehensive Course Abbreviations
+const COURSE_ABBR = {
+  'Bachelor of Science in Nursing': 'BSN',
+  'Bachelor of Science in Pharmacy': 'BSPharm',
+  'Bachelor of Elementary Education': 'BEEd',
+  'Bachelor of Secondary Education': 'BSEd',
+  'Bachelor of Science in Education': 'BSEd',
+  'Bachelor of Science in Accountancy': 'BSA',
+  'Bachelor of Science in Business Administration': 'BSBA',
+  'Bachelor of Science in Computer Science': 'BSCS',
+  'Bachelor of Science in Information Technology': 'BSIT',
+  'Bachelor of Science in Management Accounting': 'BSMA',
+  'Bachelor of Science in Management Accountancy': 'BSMA',
+  'Bachelor of Science in Psychology': 'BSPsych',
+  'Bachelor of Science in Social Work': 'BSSW',
+  'Bachelor of Arts in Communication': 'BA Comm',
+  'Bachelor of Arts': 'BA',
+  'BED - Elementary': 'BED Elem',
+  'BED - Junior Highschool Student': 'BED JHS',
+  'BED - Senior Highschool': 'BED SHS',
+  'BED Faculty': 'BED Fac',
+  'HED Faculty - BSN': 'Fac BSN',
+  'HED Faculty - BSPharmacy': 'Fac Pharm',
+  'HED Faculty - BSEducation': 'Fac Educ',
+  'HED Faculty - BSA': 'Fac BSA',
+  'HED Faculty - BSBA': 'Fac BSBA',
+  'HED Faculty - BSMA': 'Fac BSMA',
+  'HED Faculty - BSCS': 'Fac BSCS',
+  'HED Faculty - BSP': 'Fac BSP',
+  'HED Faculty - BSSW': 'Fac BSSW',
+  'HED Faculty - ABCOM': 'Fac ABCOM',
+  'GS Faculty - MAED': 'GS Fac MAED',
+  'GS Faculty - MSN': 'GS Fac MSN',
+  'GS Faculty - Other': 'GS Fac Other',
+  'Graduate School Student (MAED)': 'GS MAED',
+  'Graduate School Student (MSN)': 'GS MSN',
+  'Graduate School': 'Grad School',
+  'Senior High School': 'SHS',
+  'Faculty / Staff': 'Faculty',
+  'NTP': 'NTP',
+  'Other': 'Other'
+};
+
+function formatCourseName(k) {
+  if (!k) return 'Unknown';
+  if (COURSE_ABBR[k]) return COURSE_ABBR[k];
+  return k.replace(/Bachelor of Science in /gi, 'BS ')
+    .replace(/Bachelor of Elementary Education/gi, 'BEEd')
+    .replace(/Bachelor of Secondary Education/gi, 'BSEd')
+    .replace(/Bachelor of Arts in /gi, 'BA ')
+    .replace(/Bachelor of /gi, 'B. ');
+}
+
+// Dynamic Year & AY synchronization
+function updateYearToday() {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  // Academic year typically starts around July/August in PH
+  const startYear = getAcademicYearStart(now).getFullYear();
+  const ayPill = document.getElementById('heroAY');
+  if (ayPill) {
+    ayPill.textContent = `AY ${startYear}–${startYear + 1}`;
+  }
+
+  const fy = document.getElementById('footerYear');
+  if (fy) fy.textContent = currentYear;
+
+  const fID = document.getElementById('fID');
+  if (fID && (!fID.value || fID.value.startsWith('e.g.'))) {
+    fID.placeholder = `e.g. ${currentYear}-00123`;
+  }
+
+  const pdfTitle = document.getElementById('pdfTitle');
+  if (pdfTitle && (!pdfTitle.value || pdfTitle.value.startsWith('e.g.'))) {
+    const monthName = now.toLocaleString('default', { month: 'long' });
+    pdfTitle.placeholder = `e.g. ${monthName} ${currentYear} Library Report`;
+  }
+
+  populateYearDropdowns(currentYear);
+}
+
+function populateYearDropdowns(currentYear) {
+  const yearsSet = new Set([2024, 2025, 2026, currentYear, currentYear + 1]);
+  if (Array.isArray(allVisits)) {
+    allVisits.forEach(e => {
+      if (e.visited_at) {
+        const y = new Date(e.visited_at).getFullYear();
+        if (!isNaN(y) && y > 2000 && y < 2100) yearsSet.add(y);
+      }
+    });
+  }
+  const sortedYears = Array.from(yearsSet).sort((a, b) => b - a);
+
+  ['filterYear', 'pdfYear'].forEach(selectId => {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const currentVal = sel.value;
+    sel.innerHTML = '<option value="">All Years</option>' + sortedYears.map(y => `<option value="${y}">${y}</option>`).join('');
+    if (currentVal && yearsSet.has(parseInt(currentVal))) {
+      sel.value = currentVal;
+    }
+  });
+}
+
 // Initialize config from multiple sources (in priority order):
 // 1. Netlify Function (for production)
 // 2. config.js (for local development)
@@ -31,6 +147,7 @@ async function initializeConfig() {
 }
 
 // Initialize config on page load
+updateYearToday();
 initializeConfig().then(() => {
   loadStatsBar();
 }).catch(err => {
@@ -50,21 +167,63 @@ function isConfigured() {
   return c.url && c.key;
 }
 
-async function sbFetch(path, opts = {}) {
-  let c = getCfg();
+// Escape user-entered values before inserting them into innerHTML / report HTML
+function escapeHtml(v) {
+  return String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+async function sbRequest(path, opts = {}) {
+  const c = getCfg();
   if (!c.url || !c.key) return null;
-  let res = await fetch(c.url + '/rest/v1/' + path, {
+  // Pull headers out first so caller headers merge with (not replace) the auth headers
+  const { headers = {}, ...rest } = opts;
+  const res = await fetch(c.url + '/rest/v1/' + path, {
+    ...rest,
     headers: {
       'apikey': c.key,
       'Authorization': 'Bearer ' + c.key,
       'Content-Type': 'application/json',
       'Prefer': 'return=representation',
-      ...(opts.headers || {})
-    },
-    ...opts
+      ...headers
+    }
   });
-  if (!res.ok) return null;
-  return res.json();
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    console.error(`Supabase ${rest.method || 'GET'} ${path} failed (${res.status}):`, body);
+    return null;
+  }
+  return res;
+}
+
+async function sbFetch(path, opts = {}) {
+  const res = await sbRequest(path, opts);
+  if (!res) return null;
+  const text = await res.text();
+  return text ? JSON.parse(text) : [];
+}
+
+// Supabase caps every response at the project's "max rows" (1000 by default),
+// regardless of the limit we ask for — so page through until an empty batch comes back.
+async function sbFetchAll(query, pageSize = 1000) {
+  const rows = [], seen = new Set();
+  let offset = 0;
+  while (true) {
+    const batch = await sbFetch(`${query}&limit=${pageSize}&offset=${offset}`);
+    if (!batch) return null;
+    if (!batch.length) break;
+    // A visit inserted mid-paging shifts rows across a page boundary; skip the repeat
+    batch.forEach(r => { if (r.id == null || !seen.has(r.id)) { seen.add(r.id); rows.push(r); } });
+    offset += batch.length;
+  }
+  return rows;
+}
+
+// Exact row count from the Content-Range header, without downloading the rows
+async function sbCount(query) {
+  const res = await sbRequest(query + '&limit=1', { headers: { 'Prefer': 'count=exact' } });
+  if (!res) return null;
+  const total = (res.headers.get('content-range') || '').split('/')[1];
+  return total && total !== '*' ? parseInt(total, 10) : null;
 }
 
 async function loadStatsBar() {
@@ -75,21 +234,29 @@ async function loadStatsBar() {
     return;
   }
   try {
-    let today = new Date().toISOString().slice(0, 10);
-    let all = await sbFetch('visitor_log?select=id,name,resource,visited_at&order=visited_at.desc&limit=100000');
-    if (!all) {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const [total, todayC, last] = await Promise.all([
+      sbCount('visitor_log?select=id'),
+      sbCount('visitor_log?select=id&visited_at=gte.' + encodeURIComponent(todayStart.toISOString())),
+      sbFetch('visitor_log?select=name,resource&order=visited_at.desc&limit=1')
+    ]);
+    // Judge the connection on the plain row query; counts need the Content-Range header,
+    // so if a proxy hides it we show "—" rather than a false "Connection error"
+    if (!last) {
       document.getElementById('dbStatus').innerHTML = '<span class="db-badge db-fail">Connection error</span>';
       return;
     }
     document.getElementById('dbStatus').innerHTML = '<span class="db-badge db-ok">Connected</span>';
-    document.getElementById('totalVisits').textContent = all.length;
-    let todayC = all.filter(e => e.visited_at && e.visited_at.startsWith(today)).length;
-    document.getElementById('todayVisits').textContent = todayC;
-    if (all.length > 0) {
-      let l = all[0];
+    document.getElementById('totalVisits').textContent = total ?? '—';
+    document.getElementById('todayVisits').textContent = todayC ?? '—';
+    var wbt = document.getElementById('wb-total'); if (wbt) wbt.textContent = total ?? '—';
+    var wbd = document.getElementById('wb-today'); if (wbd) wbd.textContent = todayC ?? '—';
+    if (last.length > 0) {
+      let l = last[0];
       document.getElementById('lastVisitor').textContent = (l.name || '—') + ' — ' + (l.resource || '').split(' ').slice(0, 2).join(' ');
-    var wbt = document.getElementById('wb-total'); if(wbt) wbt.textContent = all.length;
-    var wbd = document.getElementById('wb-today'); if(wbd) wbd.textContent = todayC;
+    } else {
+      document.getElementById('lastVisitor').textContent = '—';
     }
   } catch (e) {
     document.getElementById('dbStatus').innerHTML = '<span class="db-badge db-fail">Error</span>';
@@ -111,7 +278,6 @@ function checkAdminAccess() {
 }
 
 checkAdminAccess();
-loadStatsBar();
 
 function showPage(p) {
   if (p === 'admin' && !isAdminAllowed) {
@@ -122,7 +288,13 @@ function showPage(p) {
   document.querySelectorAll('.nav-bar a').forEach(x => x.classList.remove('active'));
   document.getElementById('page-' + p).classList.add('active');
   document.getElementById('nav-' + p).classList.add('active');
-  if (p === 'admin') loadVisits();
+  // Only pull the visitor log once the admin has signed in
+  if (p === 'admin' && isAdminDashActive()) loadVisits();
+}
+
+function isAdminDashActive() {
+  const dash = document.getElementById('adminDash');
+  return !!dash && dash.classList.contains('active');
 }
 
 function checkLogin() {
@@ -141,8 +313,10 @@ function checkLogin() {
   if (errEl) errEl.style.display = 'none';
   // Populate config fields if available
   let c = getCfg();
-  if (c.url) document.getElementById('cfgUrl').value = c.url;
-  if (c.key) document.getElementById('cfgKey').value = c.key;
+  const cfgUrlEl = document.getElementById('cfgUrl');
+  const cfgKeyEl = document.getElementById('cfgKey');
+  if (cfgUrlEl && c.url) cfgUrlEl.value = c.url;
+  if (cfgKeyEl && c.key) cfgKeyEl.value = c.key;
   // Load visitor data
   loadVisits();
 }
@@ -154,36 +328,74 @@ function logoutAdmin() {
   document.getElementById('loginError').style.display = 'none';
 }
 
-async function loadVisits() {
-  document.getElementById('logTableBody').innerHTML = '<tr class="loading-row"><td colspan="8">Loading records from Supabase...</td></tr>';
+let _loadingVisits = false, _lastSyncedAt = null;
+
+function setSyncStatus(text, isError) {
+  const el = document.getElementById('syncStatus');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle('sync-error', !!isError);
+}
+
+// silent = background refresh: keep the current table on screen instead of a "Loading" row
+async function loadVisits(silent = false) {
+  if (_loadingVisits) return;
+  if (!silent) document.getElementById('logTableBody').innerHTML = '<tr class="loading-row"><td colspan="7">Loading records from Supabase...</td></tr>';
   if (!isConfigured()) {
-    document.getElementById('logTableBody').innerHTML = '<tr class="loading-row"><td colspan="8">Please configure Supabase credentials below to load visitor records.</td></tr>';
+    document.getElementById('logTableBody').innerHTML = '<tr class="loading-row"><td colspan="7">Please configure Supabase credentials below to load visitor records.</td></tr>';
     document.getElementById('ds-total').textContent = '—';
     document.getElementById('ds-today').textContent = '—';
     document.getElementById('ds-week').textContent = '—';
     document.getElementById('ds-top').textContent = '—';
+    setSyncStatus('Not connected', true);
     return;
   }
+  _loadingVisits = true;
+  setSyncStatus('Syncing…');
   try {
-    let data = await sbFetch('visitor_log?select=*&order=visited_at.desc&limit=100000');
+    let data = await sbFetchAll('visitor_log?select=*&order=visited_at.desc,id.desc');
     if (!data) {
-      document.getElementById('logTableBody').innerHTML = '<tr class="loading-row"><td colspan="8">Failed to connect. Check your Supabase URL and key.</td></tr>';
+      if (!silent) document.getElementById('logTableBody').innerHTML = '<tr class="loading-row"><td colspan="7">Failed to connect. Check your Supabase URL and key.</td></tr>';
+      setSyncStatus('Sync failed — showing last loaded data', true);
       return;
     }
+    // Background refresh with no new rows: skip the redraw so the charts don't flicker every minute
+    const unchanged = silent && data.length === allVisits.length && (data[0] || {}).id === (allVisits[0] || {}).id;
     allVisits = data;
-    updateDashStats(data);
-    renderTableData(data);
-    setTimeout(() => renderAllCharts(), 100);
+    _lastSyncedAt = new Date();
+    if (!unchanged) {
+      populateYearDropdowns(new Date().getFullYear());
+      updateDashStats(data);
+      sortTable(); // re-applies whatever search/filters/sort are active
+      setTimeout(() => renderAllCharts(), 100);
+    }
+    setSyncStatus(`Synced ${_lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${data.length} records`);
   } catch (e) {
-    document.getElementById('logTableBody').innerHTML = '<tr class="loading-row"><td colspan="8">Error loading data: ' + e.message + '</td></tr>';
+    if (!silent) document.getElementById('logTableBody').innerHTML = '<tr class="loading-row"><td colspan="7">Error loading data: ' + escapeHtml(e.message) + '</td></tr>';
+    setSyncStatus('Sync error', true);
+  } finally {
+    _loadingVisits = false;
   }
 }
 
+// Keep the dashboard in step with the database while it is open and visible
+const AUTO_REFRESH_MS = 60000;
+setInterval(() => {
+  if (isAdminDashActive() && document.visibilityState === 'visible') loadVisits(true);
+}, AUTO_REFRESH_MS);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && isAdminDashActive() &&
+    (!_lastSyncedAt || Date.now() - _lastSyncedAt.getTime() > AUTO_REFRESH_MS)) {
+    loadVisits(true);
+  }
+});
+
 function updateDashStats(data) {
-  let today = new Date().toISOString().slice(0, 10);
+  let today = getLocalDateString(new Date());
   let week = new Date();
-  week.setDate(week.getDate() - 7);
-  let todayC = data.filter(e => e.visited_at && e.visited_at.startsWith(today)).length;
+  week.setDate(week.getDate() - 6); // today + previous 6 days = 7 calendar days
+  week.setHours(0, 0, 0, 0);
+  let todayC = data.filter(e => e.visited_at && getLocalDateString(e.visited_at) === today).length;
   let weekC = data.filter(e => e.visited_at && new Date(e.visited_at) >= week).length;
   let resCount = {};
   data.forEach(e => {
@@ -198,90 +410,68 @@ function updateDashStats(data) {
 }
 
 function filterTable() {
-  let s = document.getElementById('searchLog').value.toLowerCase();
-  let r = document.getElementById('filterRes').value;
-  let d = document.getElementById('filterDate').value;
-  let m = document.getElementById('filterMonth').value;
-  let y = document.getElementById('filterYear').value;
-  let today = new Date().toISOString().slice(0, 10);
-  let week = new Date();
-  week.setDate(week.getDate() - 7);
-  let month = new Date();
-  month.setDate(1);
-  let f = allVisits.filter(e => {
-    if (s && !((e.name || '').toLowerCase().includes(s) || (e.id_number || '').toLowerCase().includes(s) || (e.course || '').toLowerCase().includes(s))) return false;
-    if (r && e.resource !== r) return false;
-    if (d === 'today' && !(e.visited_at || '').startsWith(today)) return false;
-    if (d === 'week' && new Date(e.visited_at) < week) return false;
-    if (d === 'month' && new Date(e.visited_at) < month) return false;
-    if (m && e.visited_at && new Date(e.visited_at).getMonth() + 1 !== parseInt(m)) return false;
-    if (y && e.visited_at && new Date(e.visited_at).getFullYear() !== parseInt(y)) return false;
-    return true;
-  });
-  renderTableData(f);
+  sortTable();
 }
 
 function sortTable() {
-  let sortBy = document.getElementById('sortBy').value;
-  let sortOrder = document.getElementById('sortOrder').value;
-  
-  if (!sortBy) {
-    filterTable(); // Just re-filter without sorting
-    return;
-  }
-  
-  let s = document.getElementById('searchLog').value.toLowerCase();
+  let s = (document.getElementById('searchLog').value || '').toLowerCase().trim();
   let r = document.getElementById('filterRes').value;
   let d = document.getElementById('filterDate').value;
   let m = document.getElementById('filterMonth').value;
   let y = document.getElementById('filterYear').value;
-  let today = new Date().toISOString().slice(0, 10);
+  let sortBy = document.getElementById('sortBy') ? document.getElementById('sortBy').value : '';
+  let sortOrder = document.getElementById('sortOrder') ? document.getElementById('sortOrder').value : 'desc';
+
+  let today = getLocalDateString(new Date());
   let week = new Date();
-  week.setDate(week.getDate() - 7);
-  let month = new Date();
-  month.setDate(1);
+  week.setDate(week.getDate() - 6); // today + previous 6 days = 7 calendar days
+  week.setHours(0, 0, 0, 0);
+  let now = new Date();
+  let month = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+
   let f = allVisits.filter(e => {
     if (s && !((e.name || '').toLowerCase().includes(s) || (e.id_number || '').toLowerCase().includes(s) || (e.course || '').toLowerCase().includes(s))) return false;
     if (r && e.resource !== r) return false;
-    if (d === 'today' && !(e.visited_at || '').startsWith(today)) return false;
-    if (d === 'week' && new Date(e.visited_at) < week) return false;
-    if (d === 'month' && new Date(e.visited_at) < month) return false;
-    if (m && e.visited_at && new Date(e.visited_at).getMonth() + 1 !== parseInt(m)) return false;
-    if (y && e.visited_at && new Date(e.visited_at).getFullYear() !== parseInt(y)) return false;
+    if (d === 'today' && (!e.visited_at || getLocalDateString(e.visited_at) !== today)) return false;
+    if (d === 'week' && (!e.visited_at || new Date(e.visited_at) < week)) return false;
+    if (d === 'month' && (!e.visited_at || new Date(e.visited_at) < month)) return false;
+    if (m && (!e.visited_at || new Date(e.visited_at).getMonth() + 1 !== parseInt(m))) return false;
+    if (y && (!e.visited_at || new Date(e.visited_at).getFullYear() !== parseInt(y))) return false;
     return true;
   });
-  
-  // Sort the filtered data
-  f.sort((a, b) => {
-    let aVal, bVal;
-    switch (sortBy) {
-      case 'name':
-        aVal = (a.name || '').toLowerCase();
-        bVal = (b.name || '').toLowerCase();
-        break;
-      case 'date':
-        aVal = new Date(a.visited_at || 0);
-        bVal = new Date(b.visited_at || 0);
-        break;
-      case 'course':
-        aVal = (a.course || '').toLowerCase();
-        bVal = (b.course || '').toLowerCase();
-        break;
-      default:
-        return 0;
-    }
-    
-    if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
-    if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
-    return 0;
-  });
-  
+
+  if (sortBy) {
+    f.sort((a, b) => {
+      let aVal, bVal;
+      switch (sortBy) {
+        case 'name':
+          aVal = (a.name || '').toLowerCase();
+          bVal = (b.name || '').toLowerCase();
+          break;
+        case 'date':
+          aVal = new Date(a.visited_at || 0).getTime();
+          bVal = new Date(b.visited_at || 0).getTime();
+          break;
+        case 'course':
+          aVal = (a.course || '').toLowerCase();
+          bVal = (b.course || '').toLowerCase();
+          break;
+        default:
+          return 0;
+      }
+
+      if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+
   renderTableData(f);
 }
 
 function renderTableData(data) {
   if (data.length === 0) {
-    document.getElementById('logTableBody').innerHTML = '<tr class="loading-row"><td colspan="8">No records found.</td></tr>';
+    document.getElementById('logTableBody').innerHTML = '<tr class="loading-row"><td colspan="7">No records found.</td></tr>';
     return;
   }
   let badge = (r) => {
@@ -293,10 +483,11 @@ function renderTableData(data) {
   document.getElementById('logTableBody').innerHTML = data.map((e, i) => `
     <tr>
       <td style="color:var(--muted);font-size:11px;">${i + 1}</td>
-      <td style="font-weight:500;">${e.name || '—'}</td>
-      <td style="font-family:monospace;font-size:12px;">${e.id_number || '—'}</td>
-      <td style="font-size:12px;">${e.course || '—'}</td>      <td><span class="badge b-green">${e.purpose || '—'}</span></td>
-      <td><span class="badge ${badge(e.resource)}">${e.resource || '—'}</span></td>
+      <td style="font-weight:500;">${escapeHtml(e.name) || '—'}</td>
+      <td style="font-family:monospace;font-size:12px;">${escapeHtml(e.id_number) || '—'}</td>
+      <td style="font-size:12px;">${escapeHtml(e.course) || '—'}</td>
+      <td><span class="badge b-green">${escapeHtml(e.purpose) || '—'}</span></td>
+      <td><span class="badge ${badge(e.resource)}">${escapeHtml(e.resource) || '—'}</span></td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap;">${e.visited_at ? new Date(e.visited_at).toLocaleString() : '—'}</td>
     </tr>
   `).join('');
@@ -333,10 +524,15 @@ function exportPDF() {
     showToast('No data to export.');
     return;
   }
-  
+
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    showToast('PDF export library is still loading or unavailable.');
+    return;
+  }
+
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
-  
+
   // Add header
   doc.setFontSize(20);
   doc.text('SHC Library Visitor Log', 20, 30);
@@ -344,7 +540,7 @@ function exportPDF() {
   doc.text('Sacred Heart College Lucena City, Inc.', 20, 40);
   doc.text('Generated on: ' + new Date().toLocaleString(), 20, 50);
   doc.text('Total Records: ' + allVisits.length, 20, 60);
-  
+
   // Prepare table data
   const headers = [['#', 'Name', 'ID Number', 'Course', 'Purpose', 'Resource', 'Date & Time']];
   const rows = allVisits.map((e, i) => [
@@ -356,7 +552,7 @@ function exportPDF() {
     e.resource || '',
     e.visited_at ? new Date(e.visited_at).toLocaleString() : ''
   ]);
-  
+
   // Add table
   doc.autoTable({
     head: headers,
@@ -376,7 +572,7 @@ function exportPDF() {
     },
     margin: { top: 70 },
   });
-  
+
   // Save the PDF
   const filename = 'SHC_Library_Visitor_Log_' + new Date().toISOString().slice(0, 10) + '.pdf';
   doc.save(filename);
@@ -384,9 +580,13 @@ function exportPDF() {
 }
 
 async function saveConfig() {
-  let url = document.getElementById('cfgUrl').value.trim().replace(/\/$/, '');
-  let key = document.getElementById('cfgKey').value.trim();
-  let st = document.getElementById('cfgStatus');
+  const urlEl = document.getElementById('cfgUrl');
+  const keyEl = document.getElementById('cfgKey');
+  const st = document.getElementById('cfgStatus');
+  if (!urlEl || !keyEl || !st) return;
+
+  let url = urlEl.value.trim().replace(/\/$/, '');
+  let key = keyEl.value.trim();
   if (!url || !key) {
     st.className = 'cfg-status show err';
     st.textContent = 'Please enter both Project URL and Anon Key.';
@@ -450,11 +650,11 @@ async function submitForm() {
   let ln = document.getElementById('fLastName').value.trim();
   let fn = document.getElementById('fFirstName').value.trim();
   let id = document.getElementById('fID').value.trim();
-  
+
   // Get selected courses
   let selectedCourses = Array.from(document.querySelectorAll('#courseCheckboxes input[type="checkbox"]:checked')).map(cb => cb.value);
   let course = selectedCourses.join(', ');
-  
+
   let purpose = document.getElementById('fPurpose').value;
   if (!ln || !fn || selectedCourses.length === 0) {
     showToast('Please fill in Last Name, First Name, and select at least one Course.');
@@ -470,15 +670,25 @@ async function submitForm() {
   let btn = document.getElementById('submitBtn');
   btn.textContent = 'Saving...';
   btn.disabled = true;
-  if (isConfigured()) {
-    await sbFetch('visitor_log', { method: 'POST', body: JSON.stringify(entry) });
+  try {
+    // sbFetch returns null on any rejected insert (bad key, RLS policy, missing column…)
+    const saved = isConfigured() ? await sbFetch('visitor_log', { method: 'POST', body: JSON.stringify(entry) }) : null;
+    if (saved) {
+      showToast('Welcome, ' + fn + '! Opening ' + currentResource + '...');
+      if (isAdminDashActive()) loadVisits(true);
+    } else {
+      showToast('Notice: Could not log visit to database, opening resource...');
+    }
+  } catch (err) {
+    console.error('Error logging visit:', err);
+    showToast('Notice: Could not log visit to database, opening resource...');
+  } finally {
+    btn.textContent = 'Proceed to Resource';
+    btn.disabled = false;
+    closeModal();
+    loadStatsBar();
+    setTimeout(() => { openLink(currentTarget); }, 1000);
   }
-  btn.textContent = 'Proceed to Resource';
-  btn.disabled = false;
-  closeModal();
-  loadStatsBar();
-  showToast('Welcome, ' + fn + '! Opening ' + currentResource + '...');
-  setTimeout(() => { openLink(currentTarget); }, 1000);
 }
 
 function showToast(msg) {
@@ -494,197 +704,347 @@ document.getElementById('overlay').addEventListener('click', function (e) {
 document.getElementById('pdfExportOverlay').addEventListener('click', function (e) {
   if (e.target === this) closePdfExportModal();
 });
-document.getElementById('adminPwd').addEventListener('keydown', function (e) {
-  if (e.key === 'Enter') checkLogin();
-});
 /* ═══════════════════════════════════════════════════
    ANALYTICS ENGINE  —  no function wrapping, no recursion
 ═══════════════════════════════════════════════════ */
 
 let _chartRes = null, _chartDaily = null, _chartDept = null,
-    _chartPurpose = null;
+  _chartPurpose = null, _chartHour = null, _chartWeekday = null;
 
-const PALETTE_BAR = ['#B91C1C','#1E3A5F','#166534','#C9952A','#7C2D12','#1E40AF','#065F46','#6B21A8'];
-const PALETTE_PIE = ['#B91C1C','#1E3A5F','#C9952A','#166534','#7C2D12','#6B21A8','#0369A1','#9F1239'];
+const PALETTE_BAR = ['#B91C1C', '#1E3A5F', '#166534', '#C9952A', '#7C2D12', '#1E40AF', '#065F46', '#6B21A8'];
+const PALETTE_PIE = ['#1E3A5F', '#B91C1C', '#C9952A', '#166534', '#7C2D12', '#6B21A8', '#0369A1', '#9F1239'];
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0]; // school week: Monday first
+const PERIOD_LABELS = { all: 'All Time', ay: 'This Academic Year', year: 'This Year', last30: 'Last 30 Days', month: 'This Month', week: 'Last 7 Days', today: 'Today' };
+const SORT_LABELS = { count: 'Sorted by visit count', name: 'Sorted by name', recent: 'Sorted by most recent visit' };
+
+// Academic year starts in July (same rule as the AY pill in the header)
+function getAcademicYearStart(now = new Date()) {
+  const y = now.getMonth() + 1 >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+  return new Date(y, 6, 1);
+}
+
+function getReportPeriod() {
+  return (document.getElementById('reportPeriod') || {}).value || 'all';
+}
+
+// Local-midnight start of the selected period (null = no lower bound)
+function getPeriodStart(period, now = new Date()) {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (period) {
+    case 'today': return start;
+    case 'week': start.setDate(start.getDate() - 6); return start;
+    case 'last30': start.setDate(start.getDate() - 29); return start;
+    case 'month': return new Date(now.getFullYear(), now.getMonth(), 1);
+    case 'year': return new Date(now.getFullYear(), 0, 1);
+    case 'ay': return getAcademicYearStart(now);
+    default: return null;
+  }
+}
 
 function getFilteredVisits() {
-  const period = (document.getElementById('reportPeriod') || {}).value || 'all';
-  const now = new Date();
+  const start = getPeriodStart(getReportPeriod());
   return allVisits.filter(e => {
     if (!e.visited_at) return false;
     const d = new Date(e.visited_at);
-    if (period === 'today') return d.toDateString() === now.toDateString();
-    if (period === 'week')  { const w = new Date(now); w.setDate(w.getDate()-7); return d >= w; }
-    if (period === 'month') { const m = new Date(now); m.setDate(1); m.setHours(0,0,0,0); return d >= m; }
-    return true;
+    if (isNaN(d.getTime())) return false;
+    return !start || d >= start;
   });
 }
 
+function normalizeValue(v) { return String(v ?? '').trim() || 'Unknown'; }
+
+// Count and most-recent visit per distinct value of `key`, highest count first
+function aggregateBy(arr, key) {
+  const map = new Map();
+  arr.forEach(e => {
+    const k = normalizeValue(e[key]);
+    const t = new Date(e.visited_at).getTime() || 0;
+    const cur = map.get(k);
+    if (cur) { cur.count++; if (t > cur.latest) cur.latest = t; }
+    else map.set(k, { name: k, count: 1, latest: t });
+  });
+  return [...map.values()].sort((a, b) => b.count - a.count);
+}
+
 function countBy(arr, key) {
-  const map = {};
-  arr.forEach(e => { const v = (e[key] || 'Unknown').trim(); map[v] = (map[v]||0)+1; });
-  return Object.entries(map).sort((a,b) => b[1]-a[1]);
+  return aggregateBy(arr, key).map(r => [r.name, r.count]);
 }
 
 /* ── Disseminate courses for analytics ── */
 function disseminateCourses(data) {
-  // This function expands records with multiple courses into separate entries for analytics
-  // E.g., if a record has "BSN, BSCS", it creates two virtual entries for analytics
-  // But the original record remains unchanged in the visitor log
+  // Records with multiple courses ("BSN, BSCS") become one virtual entry per course,
+  // so each course gets credit; the original record in the visitor log is unchanged.
   const disseminated = [];
   data.forEach(entry => {
-    if (entry.course && entry.course.includes(',')) {
-      // Split multiple courses and create separate entries for each
-      const courses = entry.course.split(',').map(c => c.trim());
-      courses.forEach(course => {
-        disseminated.push({ ...entry, course: course });
-      });
-    } else {
-      // Single course or no course, add as-is
-      disseminated.push(entry);
-    }
+    const courses = String(entry.course || '').split(',').map(c => c.trim()).filter(Boolean);
+    if (!courses.length) disseminated.push(entry);
+    else courses.forEach(course => disseminated.push({ ...entry, course }));
   });
   return disseminated;
 }
 
-function destroyChart(ref) { try { if (ref) ref.destroy(); } catch(e) {} return null; }
+// Same person = same ID number; fall back to the normalised name when no ID was given
+function visitorKey(e) {
+  const id = String(e.id_number || '').trim().toLowerCase();
+  if (id) return 'id:' + id;
+  return 'name:' + String(e.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function parseLocalDate(ymd) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function formatHour(h) { return `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`; }
+
+function formatMonthKey(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleString('en-PH', { month: 'short', year: 'numeric' });
+}
+
+function pct(part, whole) { return whole ? Math.round(part / whole * 100) : 0; }
+
+// One pass over the visits → every number the dashboard and the reports need
+function computeAnalytics(data) {
+  const courseData = disseminateCourses(data);
+  const dayMap = {}, monthMap = {};
+  const hours = Array(24).fill(0), weekdays = Array(7).fill(0);
+  const visitCounts = new Map();
+
+  data.forEach(e => {
+    const d = new Date(e.visited_at);
+    if (isNaN(d.getTime())) return;
+    const day = getLocalDateString(d);
+    const vk = visitorKey(e);
+    dayMap[day] = (dayMap[day] || 0) + 1;
+    hours[d.getHours()]++;
+    weekdays[d.getDay()]++;
+    const mk = day.slice(0, 7);
+    if (!monthMap[mk]) monthMap[mk] = { visits: 0, visitors: new Set() };
+    monthMap[mk].visits++;
+    monthMap[mk].visitors.add(vk);
+    visitCounts.set(vk, (visitCounts.get(vk) || 0) + 1);
+  });
+
+  const activeDays = Object.keys(dayMap).length;
+  const courses = countBy(courseData, 'course');
+  const busiest = Object.entries(dayMap).sort((a, b) => b[1] - a[1] || b[0].localeCompare(a[0]))[0];
+  const peakHour = hours.indexOf(Math.max(...hours));
+  const peakWeekday = weekdays.indexOf(Math.max(...weekdays));
+
+  return {
+    total: data.length,
+    uniqueVisitors: visitCounts.size,
+    returningVisitors: [...visitCounts.values()].filter(c => c > 1).length,
+    activeDays,
+    avgPerDay: activeDays ? data.length / activeDays : 0,
+    resources: countBy(data, 'resource'),
+    purposes: countBy(data, 'purpose'),
+    courses,
+    coursesServed: courses.filter(([k]) => k !== 'Unknown').length,
+    hours, weekdays,
+    peakHour: data.length ? peakHour : null,
+    peakWeekday: data.length ? peakWeekday : null,
+    busiestDay: busiest ? { date: busiest[0], count: busiest[1] } : null,
+    dayMap,
+    months: Object.keys(monthMap).sort().map(k => ({ key: k, label: formatMonthKey(k), visits: monthMap[k].visits, unique: monthMap[k].visitors.size }))
+  };
+}
+
+// Continuous, zero-filled trend: per day for ranges up to ~3 months, per month beyond that
+function buildTrendSeries(dayMap, period) {
+  const days = Object.keys(dayMap).sort();
+  if (!days.length) return { labels: [], values: [], unit: 'day' };
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const periodStart = getPeriodStart(period);
+  const firstData = parseLocalDate(days[0]);
+  const lastData = parseLocalDate(days[days.length - 1]);
+  const start = periodStart && periodStart < firstData ? periodStart : firstData;
+  const end = lastData > today ? lastData : today;
+  const spanDays = Math.round((end - start) / 86400000) + 1;
+
+  const labels = [], values = [];
+  if (spanDays <= 92) {
+    for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      labels.push((d.getMonth() + 1) + '/' + d.getDate());
+      values.push(dayMap[getLocalDateString(d)] || 0);
+    }
+    return { labels, values, unit: 'day' };
+  }
+  const monthTotals = {};
+  days.forEach(day => { const k = day.slice(0, 7); monthTotals[k] = (monthTotals[k] || 0) + dayMap[day]; });
+  for (const d = new Date(start.getFullYear(), start.getMonth(), 1); d <= end; d.setMonth(d.getMonth() + 1)) {
+    const k = getLocalDateString(d).slice(0, 7);
+    labels.push(formatMonthKey(k));
+    values.push(monthTotals[k] || 0);
+  }
+  return { labels, values, unit: 'month' };
+}
+
+function destroyChart(ref) { try { if (ref) ref.destroy(); } catch (e) { } return null; }
+
+function destroyAllCharts() {
+  _chartRes = destroyChart(_chartRes);
+  _chartDaily = destroyChart(_chartDaily);
+  _chartDept = destroyChart(_chartDept);
+  _chartPurpose = destroyChart(_chartPurpose);
+  _chartHour = destroyChart(_chartHour);
+  _chartWeekday = destroyChart(_chartWeekday);
+}
+
+function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
 
 function renderAllCharts() {
   const data = getFilteredVisits();
   const emptyEl = document.getElementById('analyticsEmpty');
+  const contentEl = document.getElementById('analyticsContent');
   if (!data.length) {
+    // Clear everything so the previous period's numbers don't linger on screen
+    destroyAllCharts();
+    ['kpi-total', 'kpi-unique', 'kpi-days', 'kpi-avg', 'kpi-courses', 'kpi-top-res'].forEach(id => setText(id, '—'));
+    if (contentEl) contentEl.style.display = 'none';
     if (emptyEl) emptyEl.style.display = 'block';
     return;
   }
   if (emptyEl) emptyEl.style.display = 'none';
-  
+  if (contentEl) contentEl.style.display = '';
+
+  const a = computeAnalytics(data);
   // Use disseminated courses for course-based analytics
-  const disseminatedData = disseminateCourses(data);
-  
-  updateKPIs(data, disseminatedData);
+  const courseData = disseminateCourses(data);
+
+  updateKPIs(a);
   renderResourceChart(data);
-  renderDailyChart(data);
-  renderDeptChart(disseminatedData);
+  renderDailyChart(a);
+  renderDeptChart(courseData);
   renderPurposeChart(data);
-  renderRankingTable('rankCourse',   getSortedEntries(disseminatedData, 'course'),   'course');
-  renderRankingTable('rankResource', getSortedEntries(data, 'resource'), 'resource');
+  renderHourChart(a);
+  renderWeekdayChart(a);
+  const sortLabel = SORT_LABELS[(document.getElementById('analyticsSortBy') || {}).value] || SORT_LABELS.count;
+  setText('rankCourseSub', sortLabel);
+  setText('rankResourceSub', sortLabel);
+  renderRankingTable('rankCourse', getSortedEntries(courseData, 'course'), 'course', a.total);
+  renderRankingTable('rankResource', getSortedEntries(data, 'resource'), 'resource', a.total);
 }
 
 function getSortedEntries(data, field) {
-  const sortBy = document.getElementById('analyticsSortBy').value;
-  const sortOrder = document.getElementById('analyticsSortOrder').value;
-  
-  let entries = countBy(data, field);
-  
-  entries.sort((a, b) => {
-    let aVal, bVal;
-    
-    switch (sortBy) {
-      case 'count':
-        aVal = a[1];
-        bVal = b[1];
-        break;
-      case 'name':
-        aVal = (a[0] || '').toLowerCase();
-        bVal = (b[0] || '').toLowerCase();
-        break;
-      case 'recent':
-        // For recent sorting, we need to find the most recent visit date for each item
-        const getRecentDate = (item) => {
-          const itemData = data.filter(d => d[field] === item);
-          return itemData.length > 0 ? new Date(Math.max(...itemData.map(d => new Date(d.visited_at)))) : new Date(0);
-        };
-        aVal = getRecentDate(a[0]);
-        bVal = getRecentDate(b[0]);
-        break;
-      default:
-        aVal = a[1];
-        bVal = b[1];
-    }
-    
-    if (sortOrder === 'asc') {
-      return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-    } else {
-      return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
-    }
+  const sortBy = (document.getElementById('analyticsSortBy') || {}).value || 'count';
+  const dir = ((document.getElementById('analyticsSortOrder') || {}).value || 'desc') === 'asc' ? 1 : -1;
+  const rows = aggregateBy(data, field);
+  const val = r => sortBy === 'name' ? r.name.toLowerCase() : sortBy === 'recent' ? r.latest : r.count;
+  rows.sort((a, b) => {
+    const x = val(a), y = val(b);
+    return x < y ? -dir : x > y ? dir : b.count - a.count;
   });
-  
-  return entries;
+  return rows.map(r => [r.name, r.count]);
 }
 
-function updateKPIs(data, disseminatedData) {
-  const safe = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
-  safe('kpi-total', data.length);
-  safe('kpi-days',  new Set(data.map(e=>e.visited_at.slice(0,10))).size);
-  // Count unique courses from original data
-  safe('kpi-courses', new Set(data.map(e=>e.course).filter(Boolean).flatMap(c => c.split(',').map(x => x.trim()))).size);
-  const top = countBy(data,'resource')[0];
-  safe('kpi-top-res', top ? top[0].split(' ').slice(0,2).join(' ') : '—');
+function updateKPIs(a) {
+  setText('kpi-total', a.total);
+  setText('kpi-unique', a.uniqueVisitors);
+  setText('kpi-days', a.activeDays);
+  setText('kpi-avg', a.avgPerDay.toFixed(1));
+  setText('kpi-courses', a.coursesServed);
+  const top = a.resources[0];
+  setText('kpi-top-res', top ? top[0].split(' ').slice(0, 2).join(' ') : '—');
 }
+
+const BAR_SCALES = { x: { grid: { display: false }, ticks: { font: { size: 11 } } }, y: { beginAtZero: true, ticks: { precision: 0, font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.04)' } } };
+const visitsTooltip = { callbacks: { label: c => ` ${c.raw} visit${c.raw === 1 ? '' : 's'}` } };
 
 function renderResourceChart(data) {
-  const ctx = document.getElementById('chartResource'); if(!ctx) return;
+  const ctx = document.getElementById('chartResource'); if (!ctx) return;
   _chartRes = destroyChart(_chartRes);
-  const SHORT = {'ProQuest Ebook Central':'PQ Ebook','ProQuest Research Library':'PQ Research','World Book Online':'World Book','3G E-Learning':'3G Learn','Kite Academy':'Kite','Encleare (GEAP)':'Encleare','Library and AVRC Utilization Guide':'AVRC Guide'};
-  const entries = getSortedEntries(data, 'resource').slice(0,7);
+  const SHORT = { 'ProQuest Ebook Central': 'PQ Ebook', 'ProQuest Research Library': 'PQ Research', 'World Book Online': 'World Book', '3G E-Learning': '3G Learn', 'Kite Academy': 'Kite', 'Encleare (GEAP)': 'Encleare', 'Library and AVRC Utilization Guide': 'AVRC Guide' };
+  const entries = getSortedEntries(data, 'resource').slice(0, 7);
   _chartRes = new Chart(ctx, {
-    type:'bar',
-    data:{ labels:entries.map(([k])=>SHORT[k]||k.split(' ').slice(0,2).join(' ')), datasets:[{label:'Visits',data:entries.map(([,v])=>v),backgroundColor:PALETTE_BAR,borderRadius:6,borderSkipped:false}]},
-    options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.raw} visits`}}},scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{beginAtZero:true,ticks:{stepSize:1,font:{size:11}},grid:{color:'rgba(0,0,0,0.04)'}}}}
+    type: 'bar',
+    data: { labels: entries.map(([k]) => SHORT[k] || k.split(' ').slice(0, 2).join(' ')), datasets: [{ label: 'Visits', data: entries.map(([, v]) => v), backgroundColor: PALETTE_BAR, borderRadius: 6, borderSkipped: false }] },
+    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, tooltip: { callbacks: { title: items => entries[items[0].dataIndex][0], label: visitsTooltip.callbacks.label } } }, scales: BAR_SCALES }
   });
 }
 
-function renderDailyChart(data) {
-  const ctx = document.getElementById('chartDaily'); if(!ctx) return;
+function renderDailyChart(a) {
+  const ctx = document.getElementById('chartDaily'); if (!ctx) return;
   _chartDaily = destroyChart(_chartDaily);
-  const dayMap = {};
-  data.forEach(e => { const d=e.visited_at.slice(0,10); dayMap[d]=(dayMap[d]||0)+1; });
-  const sorted = Object.entries(dayMap).sort((a,b)=>a[0].localeCompare(b[0])).slice(-30);
+  const series = buildTrendSeries(a.dayMap, getReportPeriod());
+  setText('chartDailySub', series.unit === 'month' ? 'Visits per month' : 'Visits per day');
   _chartDaily = new Chart(ctx, {
-    type:'line',
-    data:{ labels:sorted.map(([d])=>{ const dt=new Date(d); return (dt.getMonth()+1)+'/'+(dt.getDate()); }), datasets:[{label:'Visits',data:sorted.map(([,v])=>v),borderColor:'#B91C1C',backgroundColor:'rgba(185,28,28,0.08)',fill:true,tension:0.4,pointRadius:3,pointBackgroundColor:'#B91C1C'}]},
-    options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:10},maxTicksLimit:8}},y:{beginAtZero:true,ticks:{stepSize:1,font:{size:11}},grid:{color:'rgba(0,0,0,0.04)'}}}}
+    type: 'line',
+    data: { labels: series.labels, datasets: [{ label: 'Visits', data: series.values, borderColor: '#B91C1C', backgroundColor: 'rgba(185,28,28,0.08)', fill: true, tension: 0.3, pointRadius: series.values.length > 45 ? 0 : 3, pointHoverRadius: 4, pointBackgroundColor: '#B91C1C' }] },
+    options: { responsive: true, maintainAspectRatio: true, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: false }, tooltip: visitsTooltip }, scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, maxTicksLimit: 8 } }, y: { beginAtZero: true, ticks: { precision: 0, font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.04)' } } } }
   });
 }
 
 function renderDeptChart(data) {
-  const ctx = document.getElementById('chartDept'); if(!ctx) return;
+  const ctx = document.getElementById('chartDept'); if (!ctx) return;
   _chartDept = destroyChart(_chartDept);
-  const ABBR = {'Bachelor of Arts':'BA','Bachelor of Science in Nursing':'BSN','Bachelor of Science in Education':'BSEd','Bachelor of Science in Accountancy':'BSA','Bachelor of Science in Business Administration':'BSBA','Bachelor of Science in Computer Science':'BSCS','Bachelor of Science in Information Technology':'BSIT','Bachelor of Science in Social Work':'BSSW','Senior High School':'SHS','Faculty / Staff':'Faculty','Graduate School':'Grad School'};
-  const entries = getSortedEntries(data, 'course').slice(0,8);
+  const entries = getSortedEntries(data, 'course').slice(0, 8);
   _chartDept = new Chart(ctx, {
-    type:'bar',
-    data:{ labels:entries.map(([k])=>ABBR[k]||k.split(' ').slice(0,3).join(' ')), datasets:[{label:'Visits',data:entries.map(([,v])=>v),backgroundColor:PALETTE_BAR,borderRadius:5,borderSkipped:false}]},
-    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.raw} visits`}}},scales:{x:{beginAtZero:true,ticks:{font:{size:11}},grid:{color:'rgba(0,0,0,0.04)'}},y:{grid:{display:false},ticks:{font:{size:11}}}}}
+    type: 'bar',
+    data: { labels: entries.map(([k]) => formatCourseName(k)), datasets: [{ label: 'Visits', data: entries.map(([, v]) => v), backgroundColor: PALETTE_BAR, borderRadius: 5, borderSkipped: false }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { title: items => entries[items[0].dataIndex][0], label: visitsTooltip.callbacks.label } } }, scales: { x: { beginAtZero: true, ticks: { precision: 0, font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.04)' } }, y: { grid: { display: false }, ticks: { font: { size: 11 } } } } }
   });
 }
 
 function renderPurposeChart(data) {
-  const ctx = document.getElementById('chartPurpose'); if(!ctx) return;
+  const ctx = document.getElementById('chartPurpose'); if (!ctx) return;
   _chartPurpose = destroyChart(_chartPurpose);
-  const entries = getSortedEntries(data, 'purpose').slice(0,6);
+  const entries = getSortedEntries(data, 'purpose').slice(0, 8);
+  const total = data.length;
   _chartPurpose = new Chart(ctx, {
-    type:'doughnut',
-    data:{ labels:entries.map(([k])=>k||'Unknown'), datasets:[{data:entries.map(([,v])=>v),backgroundColor:['#1E3A5F','#B91C1C','#C9952A','#166534','#7C2D12','#6B21A8'],borderWidth:2,borderColor:'#fff'}]},
-    options:{responsive:true,maintainAspectRatio:true,cutout:'58%',plugins:{legend:{position:'bottom',labels:{font:{size:11},padding:10,boxWidth:12}},tooltip:{callbacks:{label:c=>` ${c.label}: ${c.raw}`}}}}
+    type: 'doughnut',
+    data: { labels: entries.map(([k]) => k), datasets: [{ data: entries.map(([, v]) => v), backgroundColor: PALETTE_PIE, borderWidth: 2, borderColor: '#fff' }] },
+    options: { responsive: true, maintainAspectRatio: true, cutout: '58%', plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 10, boxWidth: 12 } }, tooltip: { callbacks: { label: c => ` ${c.label}: ${c.raw} (${pct(c.raw, total)}%)` } } } }
   });
 }
 
-function renderRankingTable(containerId, entries, type) {
-  const el = document.getElementById(containerId); if(!el) return;
-  if(!entries.length){ el.innerHTML='<div style="padding:20px;text-align:center;font-size:13px;color:var(--tx-xs);">No data</div>'; return; }
-  const max = entries[0][1];
-  const ABBR_C = {'Bachelor of Arts':'BA','Bachelor of Science in Nursing':'BSN','Bachelor of Science in Education':'BSEd','Bachelor of Science in Accountancy':'BSA','Bachelor of Science in Business Administration':'BSBA','Bachelor of Science in Computer Science':'BSCS','Bachelor of Science in Information Technology':'BSIT','Bachelor of Science in Social Work':'BSSW','Senior High School':'SHS','Faculty / Staff':'Faculty','Graduate School':'Grad School'};
-  const ABBR_R = {'Library and AVRC Utilization Guide':'AVRC Guide'};
-  const posClass = i => i===0?'gold':i===1?'silver':i===2?'bronze':'';
-  el.innerHTML = entries.slice(0,8).map(([name,count],i) => {
-    const display = type==='course' ? (ABBR_C[name]||name) : (ABBR_R[name]||name);
-    const pct = Math.round((count/max)*100);
+// Bar colours: the peak bar in crimson, the rest in navy
+const peakColors = (values) => { const max = Math.max(...values); return values.map(v => v === max && v > 0 ? '#B91C1C' : '#1E3A5F'); };
+
+function renderHourChart(a) {
+  const ctx = document.getElementById('chartHour'); if (!ctx) return;
+  _chartHour = destroyChart(_chartHour);
+  // Only show the span of hours that actually had visits
+  const used = a.hours.map((v, h) => v ? h : -1).filter(h => h >= 0);
+  const from = used.length ? used[0] : 7, to = used.length ? used[used.length - 1] : 18;
+  const hrs = []; for (let h = from; h <= to; h++) hrs.push(h);
+  const values = hrs.map(h => a.hours[h]);
+  setText('chartHourSub', a.peakHour !== null ? `Peak at ${formatHour(a.peakHour)}` : 'Visits by time of day');
+  _chartHour = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: hrs.map(formatHour), datasets: [{ label: 'Visits', data: values, backgroundColor: peakColors(values), borderRadius: 4, borderSkipped: false }] },
+    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, tooltip: visitsTooltip }, scales: BAR_SCALES }
+  });
+}
+
+function renderWeekdayChart(a) {
+  const ctx = document.getElementById('chartWeekday'); if (!ctx) return;
+  _chartWeekday = destroyChart(_chartWeekday);
+  const values = WEEKDAY_ORDER.map(d => a.weekdays[d]);
+  setText('chartWeekdaySub', a.peakWeekday !== null ? `Busiest: ${WEEKDAYS[a.peakWeekday]}` : 'Visits by weekday');
+  _chartWeekday = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: WEEKDAY_ORDER.map(d => WEEKDAYS[d].slice(0, 3)), datasets: [{ label: 'Visits', data: values, backgroundColor: peakColors(values), borderRadius: 4, borderSkipped: false }] },
+    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, tooltip: visitsTooltip }, scales: BAR_SCALES }
+  });
+}
+
+function renderRankingTable(containerId, entries, type, total) {
+  const el = document.getElementById(containerId); if (!el) return;
+  if (!entries.length) { el.innerHTML = '<div style="padding:20px;text-align:center;font-size:13px;color:var(--tx-xs);">No data</div>'; return; }
+  // Bars scale to the real maximum and medals follow visit count, whatever the display order is
+  const max = Math.max(...entries.map(([, c]) => c));
+  const medals = new Map([...entries].sort((x, y) => y[1] - x[1]).slice(0, 3).map(([n], i) => [n, ['gold', 'silver', 'bronze'][i]]));
+  const ABBR_R = { 'Library and AVRC Utilization Guide': 'AVRC Guide' };
+  el.innerHTML = entries.slice(0, 8).map(([name, count], i) => {
+    const display = type === 'course' ? formatCourseName(name) : (ABBR_R[name] || name);
     return `<div class="rank-row">
-      <div class="rank-pos ${posClass(i)}">${i+1}</div>
-      <div class="rank-name" title="${name}">${display}</div>
-      <div class="rank-bar-wrap"><div class="rank-bar" style="width:${pct}%"></div></div>
-      <div class="rank-count">${count}</div>
+      <div class="rank-pos ${medals.get(name) || ''}">${i + 1}</div>
+      <div class="rank-name" title="${escapeHtml(name)}">${escapeHtml(display)}</div>
+      <div class="rank-bar-wrap"><div class="rank-bar" style="width:${Math.round(count / max * 100)}%"></div></div>
+      <div class="rank-count">${count}<span class="rank-pct">${pct(count, total)}%</span></div>
     </div>`;
   }).join('');
 }
@@ -692,110 +1052,24 @@ function renderRankingTable(containerId, entries, type) {
 /* ── Export CSV ── */
 function downloadReportCSV() {
   const data = getFilteredVisits();
-  if(!data.length){ showToast('No data for the selected period.'); return; }
-  const period = document.getElementById('reportPeriod').value;
-  const headers = ['#','Name','ID Number','Course / Department','Purpose','Resource Accessed','Date & Time'];
-  const rows = data.map((e,i)=>[i+1,e.name||'',e.id_number||'',e.course||'',e.purpose||'',e.resource||'',e.visited_at?new Date(e.visited_at).toLocaleString():'']);
-  const csv = [headers,...rows].map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
-  const blob = new Blob([csv],{type:'text/csv'});
+  if (!data.length) { showToast('No data for the selected period.'); return; }
+  const period = getReportPeriod();
+  const headers = ['#', 'Name', 'ID Number', 'Course / Department', 'Purpose', 'Resource Accessed', 'Date & Time'];
+  const rows = data.map((e, i) => [i + 1, e.name || '', e.id_number || '', e.course || '', e.purpose || '', e.resource || '', e.visited_at ? new Date(e.visited_at).toLocaleString() : '']);
+  const csv = [headers, ...rows].map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href=url; a.download=`SHC_Library_Report_${period}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.href = url; a.download = `SHC_Library_Report_${period}_${new Date().toISOString().slice(0, 10)}.csv`;
   a.click(); URL.revokeObjectURL(url);
   showToast(`CSV exported — ${data.length} records.`);
 }
 
-/* ── Download PDF Report ── */
+/* ── Download PDF Report (current analytics period, no extra filters) ── */
 function downloadReportPDF() {
   const data = getFilteredVisits();
-  if(!data.length){ showToast('No data for the selected period.'); return; }
-  const period = document.getElementById('reportPeriod').value;
-  const periodLabel = {all:'All Time',month:'This Month',week:'This Week',today:'Today'}[period]||'All Time';
-  const now = new Date();
-  const resCounts  = countBy(data,'resource');
-  const crseCounts = countBy(data,'course');
-  const purpCounts = countBy(data,'purpose');
-  const uniqueDays = new Set(data.map(e=>e.visited_at.slice(0,10))).size;
-  const uniqueCrs  = new Set(data.map(e=>e.course).filter(Boolean)).size;
-  const topRes = resCounts[0];
-  const tblRows = data.slice(0,200).map((e,i)=>`<tr style="background:${i%2===0?'#fff':'#f9f8f6'}"><td>${i+1}</td><td><strong>${e.name||'—'}</strong></td><td style="font-family:monospace;font-size:11px;">${e.id_number||'—'}</td><td>${e.course||'—'}</td><td>${e.purpose||'—'}</td><td>${e.resource||'—'}</td><td style="font-size:11px;">${e.visited_at?new Date(e.visited_at).toLocaleString():'—'}</td></tr>`).join('');
-  const mkRank = (arr,limit=10) => arr.slice(0,limit).map(([n,c],i)=>`<tr><td style="width:28px;font-weight:700;color:#B91C1C;">${i+1}</td><td>${n}</td><td style="text-align:right;font-weight:700;color:#1E3A5F;">${c}</td></tr>`).join('');
-  const mkSplit = (arr) => arr.map(([n,c])=>`<tr><td>${n||'Unknown'}</td><td style="text-align:right;font-weight:700;">${c}</td><td style="text-align:right;color:#78716C;">${Math.round(c/data.length*100)}%</td></tr>`).join('');
-
-  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SHC Library Report</title>
-  <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#1C1917;font-size:13px;}
-  .cover{background:linear-gradient(135deg,#152A47 0%,#1E3A5F 100%);color:#fff;padding:48px;position:relative;overflow:hidden;page-break-after:always;}
-  .cover::after{content:'';position:absolute;right:-60px;top:-60px;width:300px;height:300px;border-radius:50%;background:rgba(185,28,28,0.18);}
-  .logo{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,0.12);border:2px solid rgba(255,255,255,0.22);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;text-align:center;line-height:1.2;margin-bottom:20px;position:relative;z-index:1;}
-  h1{font-size:26px;font-weight:700;line-height:1.2;margin-bottom:6px;position:relative;z-index:1;}
-  h2{font-size:14px;font-weight:400;opacity:.7;margin-bottom:28px;position:relative;z-index:1;}
-  .meta{display:flex;gap:32px;flex-wrap:wrap;position:relative;z-index:1;}
-  .meta-item .lbl{font-size:10px;opacity:.5;text-transform:uppercase;letter-spacing:.8px;}
-  .meta-item .val{font-size:14px;font-weight:600;margin-top:2px;color:#FDE68A;}
-  .body{padding:40px 48px;}
-  .sec{margin-bottom:36px;}
-  .sec-title{font-size:15px;font-weight:700;color:#1E3A5F;border-bottom:2px solid #B91C1C;padding-bottom:6px;margin-bottom:16px;}
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}
-  .kpi{background:#F7F6F3;border-radius:8px;padding:16px 18px;border:1px solid #E2DDD8;}
-  .kpi .v{font-size:28px;font-weight:700;color:#1E3A5F;line-height:1;}
-  .kpi .l{font-size:10px;color:#78716C;text-transform:uppercase;letter-spacing:.6px;margin-top:3px;}
-  .summary{font-size:13px;color:#44403C;line-height:1.75;background:#FEF2F2;border-left:4px solid #B91C1C;padding:14px 18px;border-radius:0 8px 8px 0;margin-bottom:8px;}
-  .two{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
-  table{width:100%;border-collapse:collapse;font-size:12px;}
-  th{background:#1E3A5F;color:#fff;padding:9px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;}
-  td{padding:8px 12px;border-bottom:1px solid #EDE9E4;vertical-align:top;}
-  tr:last-child td{border-bottom:none;}
-  .ft{background:#152A47;color:rgba(255,255,255,.45);padding:14px 48px;font-size:11px;display:flex;justify-content:space-between;}
-  @media print{.cover,.kpi,.summary{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}</style></head><body>
-  <div class="cover">
-    <div class="logo">SHC<br>LCI</div>
-    <h1>Library Resource Center<br>Usage Analytics Report</h1>
-    <h2>Sacred Heart College — Lucena City, Inc.</h2>
-    <div class="meta">
-      <div class="meta-item"><div class="lbl">Period</div><div class="val">${periodLabel}</div></div>
-      <div class="meta-item"><div class="lbl">Generated</div><div class="val">${now.toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'})}</div></div>
-      <div class="meta-item"><div class="lbl">Time</div><div class="val">${now.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}</div></div>
-      <div class="meta-item"><div class="lbl">Prepared By</div><div class="val">SHC Library System</div></div>
-    </div>
-  </div>
-  <div class="body">
-    <div class="sec">
-      <div class="sec-title">Executive Summary</div>
-      <div class="kpis">
-        <div class="kpi"><div class="v">${data.length}</div><div class="l">Total Visitors</div></div>
-        <div class="kpi"><div class="v">${uniqueDays}</div><div class="l">Active Days</div></div>
-        <div class="kpi"><div class="v">${uniqueCrs}</div><div class="l">Courses Served</div></div>
-        <div class="kpi"><div class="v">${topRes?topRes[1]:0}</div><div class="l">Top Resource Hits</div></div>
-      </div>
-      <div class="summary">During the period of <strong>${periodLabel}</strong>, the SHC Library Resource Center recorded <strong>${data.length} visitor transactions</strong> across all digital e-resource platforms. The system served students and faculty from <strong>${uniqueCrs} academic courses/departments</strong> over <strong>${uniqueDays} active days</strong>.${topRes?` The most accessed resource was <strong>${topRes[0]}</strong> with <strong>${topRes[1]} visits</strong>.`:''}</div>
-    </div>
-    <div class="sec">
-      <div class="sec-title">Resource Utilization &amp; Visit Purpose</div>
-      <div class="two">
-        <table><thead><tr><th>#</th><th>Resource</th><th style="text-align:right">Visits</th></tr></thead><tbody>${mkRank(resCounts)}</tbody></table>
-        <table><thead><tr><th>Purpose</th><th style="text-align:right">Count</th><th style="text-align:right">%</th></tr></thead><tbody>${mkSplit(purpCounts)}</tbody></table>
-      </div>
-    </div>
-    <div class="sec">
-      <div class="sec-title">Visitor Demographics</div>
-      <div class="two">
-        <table><thead><tr><th>#</th><th>Course / Department</th><th style="text-align:right">Visits</th></tr></thead><tbody>${mkRank(crseCounts)}</tbody></table>
-
-      </div>
-    </div>
-    <div class="sec">
-      <div class="sec-title">Visitor Log — ${Math.min(data.length,200)} of ${data.length} records</div>
-      <table><thead><tr><th>#</th><th>Name</th><th>ID No.</th><th>Course</th><th>Purpose</th><th>Resource</th><th>Date &amp; Time</th></tr></thead><tbody>${tblRows}</tbody></table>
-      ${data.length>200?'<p style="text-align:center;font-size:11px;color:#78716C;margin-top:10px;">Showing first 200 records. Use Export CSV for full data.</p>':''}
-    </div>
-  </div>
-  <div class="ft"><span>Sacred Heart College Lucena City, Inc. — Library Resource Center</span><span>Generated ${now.toLocaleString('en-PH')}</span></div>
-  </body></html>`;
-
-  const blob = new Blob([html],{type:'text/html'});
-  const url  = URL.createObjectURL(blob);
-  const win  = openLink(url);
-  showToast("Report opened — Print → Save as PDF.");
+  if (!data.length) { showToast('No data for the selected period.'); return; }
+  generateCustomPDF(data, 'Library Resource Center Usage Analytics Report', '', true, true, true, 'date');
 }
 
 /* ── PDF Export Modal ── */
@@ -811,7 +1085,7 @@ function openPdfExportModal() {
   document.getElementById('pdfIncludeSummary').checked = true;
   document.getElementById('pdfIncludeCharts').checked = true;
   document.getElementById('pdfIncludeLog').checked = true;
-  
+
   // Show modal
   document.getElementById('pdfExportOverlay').classList.add('active');
 }
@@ -832,41 +1106,30 @@ function generateFilteredPDF() {
   const includeSummary = document.getElementById('pdfIncludeSummary').checked;
   const includeCharts = document.getElementById('pdfIncludeCharts').checked;
   const includeLog = document.getElementById('pdfIncludeLog').checked;
-  
+
   // Get base filtered data (from analytics period)
   let data = getFilteredVisits();
-  
+
   // Apply additional filters
   data = data.filter(entry => {
-    if (month && entry.visited_at) {
-      const entryMonth = new Date(entry.visited_at).getMonth() + 1;
-      if (entryMonth !== parseInt(month)) return false;
-    }
-    if (year && entry.visited_at) {
-      const entryYear = new Date(entry.visited_at).getFullYear();
-      if (entryYear !== parseInt(year)) return false;
-    }
-    if (date && entry.visited_at) {
-      const entryDate = entry.visited_at.slice(0, 10);
-      if (entryDate !== date) return false;
-    }
-    if (course && entry.course !== course) return false;
+    const d = new Date(entry.visited_at);
+    if (month && d.getMonth() + 1 !== parseInt(month)) return false;
+    if (year && d.getFullYear() !== parseInt(year)) return false;
+    if (date && getLocalDateString(d) !== date) return false;
+    // Multi-course visits are stored comma-joined ("BSN, BSCS"), so match any of them
+    if (course && !String(entry.course || '').split(',').map(c => c.trim()).includes(course)) return false;
     return true;
   });
-  
+
   if (!data.length) {
     showToast('No data matches the selected filters.');
     return;
   }
-  
+
   // Sort the data
   data.sort((a, b) => {
     let aVal, bVal;
     switch (sortBy) {
-      case 'date':
-        aVal = new Date(a.visited_at || 0);
-        bVal = new Date(b.visited_at || 0);
-        break;
       case 'name':
         aVal = (a.name || '').toLowerCase();
         bVal = (b.name || '').toLowerCase();
@@ -880,50 +1143,50 @@ function generateFilteredPDF() {
         bVal = (b.resource || '').toLowerCase();
         break;
       default:
-        aVal = new Date(a.visited_at || 0);
-        bVal = new Date(b.visited_at || 0);
+        aVal = new Date(a.visited_at || 0).getTime();
+        bVal = new Date(b.visited_at || 0).getTime();
     }
-    
+
     if (sortOrder === 'asc') {
       return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
     } else {
       return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
     }
   });
-  
+
   // Generate filter description
   let filterDesc = [];
-  if (month) filterDesc.push(`Month: ${new Date(2024, parseInt(month)-1, 1).toLocaleString('default', { month: 'long' })}`);
+  if (month) filterDesc.push(`Month: ${new Date(2000, parseInt(month) - 1, 1).toLocaleString('en-PH', { month: 'long' })}`);
   if (year) filterDesc.push(`Year: ${year}`);
-  if (date) filterDesc.push(`Date: ${new Date(date).toLocaleDateString()}`);
+  if (date) filterDesc.push(`Date: ${parseLocalDate(date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}`);
   if (course) filterDesc.push(`Course: ${course}`);
-  const filterText = filterDesc.length > 0 ? ` (${filterDesc.join(', ')})` : '';
-  
+
   // Generate PDF
-  generateCustomPDF(data, title, filterText, includeSummary, includeCharts, includeLog, sortBy);
-  
+  generateCustomPDF(data, title, filterDesc.join(', '), includeSummary, includeCharts, includeLog, sortBy);
+
   // Close modal
   closePdfExportModal();
 }
 
 function generateCustomPDF(data, title, filterText, includeSummary, includeCharts, includeLog, sortBy) {
   const now = new Date();
-  const disseminatedData = disseminateCourses(data);
-  const resCounts  = countBy(data,'resource');
-  const crseCounts = countBy(disseminatedData,'course');
-  const purpCounts = countBy(data,'purpose');
-  const uniqueDays = new Set(data.map(e=>e.visited_at.slice(0,10))).size;
-  const uniqueCrs  = new Set(disseminatedData.map(e=>e.course).filter(Boolean)).size;
-  const topRes = resCounts[0];
-  
-  // Sort data for table display
-  const sortedData = [...data];
-  const tblRows = sortedData.slice(0,500).map((e,i)=>`<tr style="background:${i%2===0?'#fff':'#f9f8f6'}"><td>${i+1}</td><td><strong>${e.name||'—'}</strong></td><td style="font-family:monospace;font-size:11px;">${e.id_number||'—'}</td><td>${e.course||'—'}</td><td>${e.purpose||'—'}</td><td>${e.resource||'—'}</td><td style="font-size:11px;">${e.visited_at?new Date(e.visited_at).toLocaleString():'—'}</td></tr>`).join('');
-  
-  const mkRank = (arr,limit=10) => arr.slice(0,limit).map(([n,c],i)=>`<tr><td style="width:28px;font-weight:700;color:#B91C1C;">${i+1}</td><td>${n}</td><td style="text-align:right;font-weight:700;color:#1E3A5F;">${c}</td></tr>`).join('');
-  const mkSplit = (arr) => arr.map(([n,c])=>`<tr><td>${n||'Unknown'}</td><td style="text-align:right;font-weight:700;">${c}</td><td style="text-align:right;color:#78716C;">${Math.round(c/data.length*100)}%</td></tr>`).join('');
+  const a = computeAnalytics(data);
+  const periodLabel = PERIOD_LABELS[getReportPeriod()] || 'All Time';
+  const topRes = a.resources[0];
+  const topCourse = a.courses.find(([k]) => k !== 'Unknown');
+  const esc = escapeHtml;
+  const LOG_LIMIT = 500;
 
-  let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title>
+  const tblRows = data.slice(0, LOG_LIMIT).map((e, i) => `<tr style="background:${i % 2 === 0 ? '#fff' : '#f9f8f6'}"><td>${i + 1}</td><td><strong>${esc(e.name) || '—'}</strong></td><td style="font-family:monospace;font-size:11px;">${esc(e.id_number) || '—'}</td><td>${esc(e.course) || '—'}</td><td>${esc(e.purpose) || '—'}</td><td>${esc(e.resource) || '—'}</td><td style="font-size:11px;">${e.visited_at ? new Date(e.visited_at).toLocaleString() : '—'}</td></tr>`).join('');
+
+  const mkRank = (arr, limit = 10) => arr.slice(0, limit).map(([n, c], i) => `<tr><td style="width:28px;font-weight:700;color:#B91C1C;">${i + 1}</td><td>${esc(n)}</td><td style="text-align:right;font-weight:700;color:#1E3A5F;">${c}</td><td style="text-align:right;color:#78716C;">${pct(c, a.total)}%</td></tr>`).join('');
+  const mkSplit = (arr) => arr.map(([n, c]) => `<tr><td>${esc(n)}</td><td style="text-align:right;font-weight:700;">${c}</td><td style="text-align:right;color:#78716C;">${pct(c, a.total)}%</td></tr>`).join('');
+  const weekdayRows = WEEKDAY_ORDER.map(d => `<tr${d === a.peakWeekday ? ' style="background:#FEF2F2;"' : ''}><td>${WEEKDAYS[d]}</td><td style="text-align:right;font-weight:700;">${a.weekdays[d]}</td><td style="text-align:right;color:#78716C;">${pct(a.weekdays[d], a.total)}%</td></tr>`).join('');
+  const hourRows = a.hours.map((c, h) => [h, c]).filter(([, c]) => c > 0).sort((x, y) => y[1] - x[1]).slice(0, 6).map(([h, c]) => `<tr><td>${formatHour(h)} – ${formatHour((h + 1) % 24)}</td><td style="text-align:right;font-weight:700;">${c}</td><td style="text-align:right;color:#78716C;">${pct(c, a.total)}%</td></tr>`).join('');
+  const monthRows = a.months.map(m => `<tr><td>${m.label}</td><td style="text-align:right;font-weight:700;">${m.visits}</td><td style="text-align:right;">${m.unique}</td></tr>`).join('');
+  const busiestLabel = a.busiestDay ? parseLocalDate(a.busiestDay.date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+
+  let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(title)}</title>
   <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#1C1917;font-size:13px;}
   .cover{background:linear-gradient(135deg,#152A47 0%,#1E3A5F 100%);color:#fff;padding:48px;position:relative;overflow:hidden;page-break-after:always;}
   .cover::after{content:'';position:absolute;right:-60px;top:-60px;width:300px;height:300px;border-radius:50%;background:rgba(185,28,28,0.18);}
@@ -934,47 +1197,53 @@ function generateCustomPDF(data, title, filterText, includeSummary, includeChart
   .meta-item .lbl{font-size:10px;opacity:.5;text-transform:uppercase;letter-spacing:.8px;}
   .meta-item .val{font-size:14px;font-weight:600;margin-top:2px;color:#FDE68A;}
   .body{padding:40px 48px;}
-  .sec{margin-bottom:36px;}
+  .sec{margin-bottom:36px;page-break-inside:avoid;}
+  .sec-log{page-break-inside:auto;}
   .sec-title{font-size:15px;font-weight:700;color:#1E3A5F;border-bottom:2px solid #B91C1C;padding-bottom:6px;margin-bottom:16px;}
   .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}
   .kpi{background:#F7F6F3;border-radius:8px;padding:16px 18px;border:1px solid #E2DDD8;}
   .kpi .v{font-size:28px;font-weight:700;color:#1E3A5F;line-height:1;}
+  .kpi .v.sm{font-size:20px;}
   .kpi .l{font-size:10px;color:#78716C;text-transform:uppercase;letter-spacing:.6px;margin-top:3px;}
   .summary{font-size:13px;color:#44403C;line-height:1.75;background:#FEF2F2;border-left:4px solid #B91C1C;padding:14px 18px;border-radius:0 8px 8px 0;margin-bottom:8px;}
-  .two{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;}
+  .sub{font-size:12px;font-weight:700;color:#44403C;margin-bottom:8px;}
   table{width:100%;border-collapse:collapse;font-size:12px;}
   th{background:#1E3A5F;color:#fff;padding:9px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;}
   td{padding:8px 12px;border-bottom:1px solid #EDE9E4;vertical-align:top;}
   tr:last-child td{border-bottom:none;}
   .ft{background:#152A47;color:rgba(255,255,255,.45);padding:14px 48px;font-size:11px;display:flex;justify-content:space-between;}
-  @media print{.cover,.kpi,.summary{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}</style></head><body>
+  @media print{.cover,.kpi,.summary,th,tr{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}</style></head><body>
   <div class="cover">
     <div class="logo">SHC<br>LCI</div>
-    <h1>${title}</h1>
+    <h1>${esc(title)}</h1>
     <h2>Sacred Heart College — Lucena City, Inc.</h2>
     <div class="meta">
-      <div class="meta-item"><div class="lbl">Filters</div><div class="val">${filterText || 'All Data'}</div></div>
-      <div class="meta-item"><div class="lbl">Generated</div><div class="val">${now.toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'})}</div></div>
-      <div class="meta-item"><div class="lbl">Time</div><div class="val">${now.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}</div></div>
-      <div class="meta-item"><div class="lbl">Records</div><div class="val">${data.length}</div></div>
+      <div class="meta-item"><div class="lbl">Period</div><div class="val">${periodLabel}</div></div>
+      <div class="meta-item"><div class="lbl">Filters</div><div class="val">${esc(filterText) || 'None'}</div></div>
+      <div class="meta-item"><div class="lbl">Generated</div><div class="val">${now.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</div></div>
+      <div class="meta-item"><div class="lbl">Time</div><div class="val">${now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</div></div>
+      <div class="meta-item"><div class="lbl">Records</div><div class="val">${a.total}</div></div>
     </div>
-  </div>`;
+  </div>
+  <div class="body">`;
 
   if (includeSummary) {
     html += `
-  <div class="body">
     <div class="sec">
       <div class="sec-title">Executive Summary</div>
       <div class="kpis">
-        <div class="kpi"><div class="v">${data.length}</div><div class="l">Total Visitors</div></div>
-        <div class="kpi"><div class="v">${uniqueDays}</div><div class="l">Active Days</div></div>
-        <div class="kpi"><div class="v">${uniqueCrs}</div><div class="l">Courses Served</div></div>
-        <div class="kpi"><div class="v">${topRes?topRes[1]:0}</div><div class="l">Top Resource Hits</div></div>
+        <div class="kpi"><div class="v">${a.total}</div><div class="l">Total Visits</div></div>
+        <div class="kpi"><div class="v">${a.uniqueVisitors}</div><div class="l">Unique Visitors</div></div>
+        <div class="kpi"><div class="v">${a.activeDays}</div><div class="l">Active Days</div></div>
+        <div class="kpi"><div class="v">${a.avgPerDay.toFixed(1)}</div><div class="l">Avg Visits / Active Day</div></div>
+        <div class="kpi"><div class="v">${a.coursesServed}</div><div class="l">Courses Served</div></div>
+        <div class="kpi"><div class="v">${topRes ? topRes[1] : 0}</div><div class="l">Top Resource Hits</div></div>
+        <div class="kpi"><div class="v sm">${a.peakHour !== null ? formatHour(a.peakHour) : '—'}</div><div class="l">Peak Hour</div></div>
+        <div class="kpi"><div class="v sm">${a.peakWeekday !== null ? WEEKDAYS[a.peakWeekday] : '—'}</div><div class="l">Busiest Weekday</div></div>
       </div>
-      <div class="summary">This report contains <strong>${data.length} visitor transactions</strong> from <strong>${uniqueCrs} academic courses/departments</strong> over <strong>${uniqueDays} active days</strong>.${topRes?` The most accessed resource was <strong>${topRes[0]}</strong> with <strong>${topRes[1]} visits</strong>.`:''} Data is sorted by <strong>${sortBy === 'date' ? 'date & time' : sortBy}</strong>.</div>
+      <div class="summary">During <strong>${periodLabel}</strong>${filterText ? ` (filtered by ${esc(filterText)})` : ''}, the SHC Library Resource Center recorded <strong>${a.total} visit${a.total === 1 ? '' : 's'}</strong> from <strong>${a.uniqueVisitors} unique visitor${a.uniqueVisitors === 1 ? '' : 's'}</strong> across <strong>${a.coursesServed} academic course${a.coursesServed === 1 ? '' : 's'}/department${a.coursesServed === 1 ? '' : 's'}</strong> over <strong>${a.activeDays} active day${a.activeDays === 1 ? '' : 's'}</strong>, an average of <strong>${a.avgPerDay.toFixed(1)} visits per active day</strong>. <strong>${a.returningVisitors}</strong> visitor${a.returningVisitors === 1 ? '' : 's'} (${pct(a.returningVisitors, a.uniqueVisitors)}%) used the e-resources more than once.${topRes ? ` The most accessed resource was <strong>${esc(topRes[0])}</strong> with <strong>${topRes[1]} visits</strong> (${pct(topRes[1], a.total)}% of all visits)` : ''}${topCourse ? `, and the most represented course/department was <strong>${esc(topCourse[0])}</strong> (${topCourse[1]} visits)` : ''}.${a.peakHour !== null ? ` Usage peaked around <strong>${formatHour(a.peakHour)}</strong>, with <strong>${WEEKDAYS[a.peakWeekday]}</strong> as the busiest day of the week` : ''}${a.busiestDay ? `; the single busiest day was <strong>${busiestLabel}</strong> with <strong>${a.busiestDay.count} visits</strong>` : ''}.${includeLog ? ` The visitor log below is sorted by <strong>${sortBy === 'date' ? 'date &amp; time' : esc(sortBy)}</strong>.` : ''}</div>
     </div>`;
-  } else {
-    html += `<div class="body">`;
   }
 
   if (includeCharts) {
@@ -982,24 +1251,33 @@ function generateCustomPDF(data, title, filterText, includeSummary, includeChart
     <div class="sec">
       <div class="sec-title">Resource Utilization &amp; Visit Purpose</div>
       <div class="two">
-        <table><thead><tr><th>#</th><th>Resource</th><th style="text-align:right">Visits</th></tr></thead><tbody>${mkRank(resCounts)}</tbody></table>
-        <table><thead><tr><th>Purpose</th><th style="text-align:right">Count</th><th style="text-align:right">%</th></tr></thead><tbody>${mkSplit(purpCounts)}</tbody></table>
+        <table><thead><tr><th>#</th><th>Resource</th><th style="text-align:right">Visits</th><th style="text-align:right">%</th></tr></thead><tbody>${mkRank(a.resources)}</tbody></table>
+        <table><thead><tr><th>Purpose</th><th style="text-align:right">Count</th><th style="text-align:right">%</th></tr></thead><tbody>${mkSplit(a.purposes)}</tbody></table>
       </div>
     </div>
     <div class="sec">
       <div class="sec-title">Visitor Demographics</div>
       <div class="two">
-        <table><thead><tr><th>#</th><th>Course / Department</th><th style="text-align:right">Visits</th></tr></thead><tbody>${mkRank(crseCounts)}</tbody></table>
+        <table><thead><tr><th>#</th><th>Course / Department</th><th style="text-align:right">Visits</th><th style="text-align:right">%</th></tr></thead><tbody>${mkRank(a.courses, 15)}</tbody></table>
+        <table><thead><tr><th>Month</th><th style="text-align:right">Visits</th><th style="text-align:right">Unique Visitors</th></tr></thead><tbody>${monthRows}</tbody></table>
+      </div>
+      ${a.courses.length ? '<p style="font-size:11px;color:#78716C;margin-top:8px;">Visitors who selected more than one course are counted under each course, so course percentages can total more than 100%.</p>' : ''}
+    </div>
+    <div class="sec">
+      <div class="sec-title">Usage Patterns</div>
+      <div class="two">
+        <div><div class="sub">Visits by Day of Week</div><table><thead><tr><th>Day</th><th style="text-align:right">Visits</th><th style="text-align:right">%</th></tr></thead><tbody>${weekdayRows}</tbody></table></div>
+        <div><div class="sub">Peak Hours</div><table><thead><tr><th>Time</th><th style="text-align:right">Visits</th><th style="text-align:right">%</th></tr></thead><tbody>${hourRows}</tbody></table></div>
       </div>
     </div>`;
   }
 
   if (includeLog) {
     html += `
-    <div class="sec">
-      <div class="sec-title">Visitor Log — ${Math.min(data.length,500)} of ${data.length} records</div>
+    <div class="sec sec-log">
+      <div class="sec-title">Visitor Log — ${Math.min(data.length, LOG_LIMIT)} of ${data.length} records</div>
       <table><thead><tr><th>#</th><th>Name</th><th>ID No.</th><th>Course</th><th>Purpose</th><th>Resource</th><th>Date &amp; Time</th></tr></thead><tbody>${tblRows}</tbody></table>
-      ${data.length>500?'<p style="text-align:center;font-size:11px;color:#78716C;margin-top:10px;">Showing first 500 records. Use Export CSV for full data.</p>':''}
+      ${data.length > LOG_LIMIT ? `<p style="text-align:center;font-size:11px;color:#78716C;margin-top:10px;">Showing first ${LOG_LIMIT} records. Use Export CSV for full data.</p>` : ''}
     </div>`;
   }
 
@@ -1008,8 +1286,8 @@ function generateCustomPDF(data, title, filterText, includeSummary, includeChart
   <div class="ft"><span>Sacred Heart College Lucena City, Inc. — Library Resource Center</span><span>Generated ${now.toLocaleString('en-PH')}</span></div>
   </body></html>`;
 
-  const blob = new Blob([html],{type:'text/html'});
-  const url  = URL.createObjectURL(blob);
-  const win  = window.open(url,'_blank');
-  if(win) win.oopenLink(url);
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  openLink(url);
+  showToast("Report opened — Print → Save as PDF.");
 }
