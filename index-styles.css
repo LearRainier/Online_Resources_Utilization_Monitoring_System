@@ -894,6 +894,29 @@ body {
     cursor: not-allowed;
 }
 
+.btn-docx {
+    background: #1E3A5F;
+}
+
+.btn-docx:hover {
+    background: #152A47;
+}
+
+@media (max-width: 480px) {
+    .modal-footer:has(.btn-docx) {
+        flex-wrap: wrap;
+    }
+
+    .modal-footer:has(.btn-docx) .btn-submit {
+        flex: 1 1 100%;
+    }
+
+    .modal-footer:has(.btn-docx) .btn-cancel {
+        flex: 1 1 100%;
+        order: 1;
+    }
+}
+
 .btn-cancel {
     flex: 0 0 90px;
     background: transparent;

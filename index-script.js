@@ -852,16 +852,17 @@ function computeAnalytics(data) {
   };
 }
 
-// Continuous, zero-filled trend: per day for ranges up to ~3 months, per month beyond that
-function buildTrendSeries(dayMap, period) {
+// Continuous, zero-filled trend: per day for ranges up to ~3 months, per month beyond that.
+// clipToData limits the range to the first..last visit (used when the report has extra filters).
+function buildTrendSeries(dayMap, period, clipToData = false) {
   const days = Object.keys(dayMap).sort();
   if (!days.length) return { labels: [], values: [], unit: 'day' };
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const periodStart = getPeriodStart(period);
+  const periodStart = clipToData ? null : getPeriodStart(period);
   const firstData = parseLocalDate(days[0]);
   const lastData = parseLocalDate(days[days.length - 1]);
   const start = periodStart && periodStart < firstData ? periodStart : firstData;
-  const end = lastData > today ? lastData : today;
+  const end = clipToData || lastData > today ? lastData : today;
   const spanDays = Math.round((end - start) / 86400000) + 1;
 
   const labels = [], values = [];
@@ -953,16 +954,70 @@ function updateKPIs(a) {
 const BAR_SCALES = { x: { grid: { display: false }, ticks: { font: { size: 11 } } }, y: { beginAtZero: true, ticks: { precision: 0, font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.04)' } } };
 const visitsTooltip = { callbacks: { label: c => ` ${c.raw} visit${c.raw === 1 ? '' : 's'}` } };
 
+/* ── Chart configs — shared by the dashboard and the generated report ── */
+const RES_SHORT = { 'ProQuest Ebook Central': 'PQ Ebook', 'ProQuest Research Library': 'PQ Research', 'World Book Online': 'World Book', '3G E-Learning': '3G Learn', 'Kite Academy': 'Kite', 'Encleare (GEAP)': 'Encleare', 'Library and AVRC Utilization Guide': 'AVRC Guide' };
+
+function resourceChartConfig(entries) {
+  return {
+    type: 'bar',
+    data: { labels: entries.map(([k]) => RES_SHORT[k] || k.split(' ').slice(0, 2).join(' ')), datasets: [{ label: 'Visits', data: entries.map(([, v]) => v), backgroundColor: PALETTE_BAR, borderRadius: 6, borderSkipped: false }] },
+    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, tooltip: { callbacks: { title: items => entries[items[0].dataIndex][0], label: visitsTooltip.callbacks.label } } }, scales: BAR_SCALES }
+  };
+}
+
+function trendChartConfig(series) {
+  return {
+    type: 'line',
+    data: { labels: series.labels, datasets: [{ label: 'Visits', data: series.values, borderColor: '#B91C1C', backgroundColor: 'rgba(185,28,28,0.08)', fill: true, tension: 0.3, pointRadius: series.values.length > 45 ? 0 : 3, pointHoverRadius: 4, pointBackgroundColor: '#B91C1C' }] },
+    options: { responsive: true, maintainAspectRatio: true, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: false }, tooltip: visitsTooltip }, scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, maxTicksLimit: 8 } }, y: { beginAtZero: true, ticks: { precision: 0, font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.04)' } } } }
+  };
+}
+
+function courseChartConfig(entries) {
+  return {
+    type: 'bar',
+    data: { labels: entries.map(([k]) => formatCourseName(k)), datasets: [{ label: 'Visits', data: entries.map(([, v]) => v), backgroundColor: PALETTE_BAR, borderRadius: 5, borderSkipped: false }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { title: items => entries[items[0].dataIndex][0], label: visitsTooltip.callbacks.label } } }, scales: { x: { beginAtZero: true, ticks: { precision: 0, font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.04)' } }, y: { grid: { display: false }, ticks: { font: { size: 11 } } } } }
+  };
+}
+
+function purposeChartConfig(entries, total) {
+  return {
+    type: 'doughnut',
+    data: { labels: entries.map(([k]) => k), datasets: [{ data: entries.map(([, v]) => v), backgroundColor: PALETTE_PIE, borderWidth: 2, borderColor: '#fff' }] },
+    options: { responsive: true, maintainAspectRatio: true, cutout: '58%', plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 10, boxWidth: 12 } }, tooltip: { callbacks: { label: c => ` ${c.label}: ${c.raw} (${pct(c.raw, total)}%)` } } } }
+  };
+}
+
+// Bar colours: the peak bar in crimson, the rest in navy
+const peakColors = (values) => { const max = Math.max(...values); return values.map(v => v === max && v > 0 ? '#B91C1C' : '#1E3A5F'); };
+
+function hourChartConfig(a) {
+  // Only show the span of hours that actually had visits
+  const used = a.hours.map((v, h) => v ? h : -1).filter(h => h >= 0);
+  const from = used.length ? used[0] : 7, to = used.length ? used[used.length - 1] : 18;
+  const hrs = []; for (let h = from; h <= to; h++) hrs.push(h);
+  const values = hrs.map(h => a.hours[h]);
+  return {
+    type: 'bar',
+    data: { labels: hrs.map(formatHour), datasets: [{ label: 'Visits', data: values, backgroundColor: peakColors(values), borderRadius: 4, borderSkipped: false }] },
+    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, tooltip: visitsTooltip }, scales: BAR_SCALES }
+  };
+}
+
+function weekdayChartConfig(a) {
+  const values = WEEKDAY_ORDER.map(d => a.weekdays[d]);
+  return {
+    type: 'bar',
+    data: { labels: WEEKDAY_ORDER.map(d => WEEKDAYS[d].slice(0, 3)), datasets: [{ label: 'Visits', data: values, backgroundColor: peakColors(values), borderRadius: 4, borderSkipped: false }] },
+    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, tooltip: visitsTooltip }, scales: BAR_SCALES }
+  };
+}
+
 function renderResourceChart(data) {
   const ctx = document.getElementById('chartResource'); if (!ctx) return;
   _chartRes = destroyChart(_chartRes);
-  const SHORT = { 'ProQuest Ebook Central': 'PQ Ebook', 'ProQuest Research Library': 'PQ Research', 'World Book Online': 'World Book', '3G E-Learning': '3G Learn', 'Kite Academy': 'Kite', 'Encleare (GEAP)': 'Encleare', 'Library and AVRC Utilization Guide': 'AVRC Guide' };
-  const entries = getSortedEntries(data, 'resource').slice(0, 7);
-  _chartRes = new Chart(ctx, {
-    type: 'bar',
-    data: { labels: entries.map(([k]) => SHORT[k] || k.split(' ').slice(0, 2).join(' ')), datasets: [{ label: 'Visits', data: entries.map(([, v]) => v), backgroundColor: PALETTE_BAR, borderRadius: 6, borderSkipped: false }] },
-    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, tooltip: { callbacks: { title: items => entries[items[0].dataIndex][0], label: visitsTooltip.callbacks.label } } }, scales: BAR_SCALES }
-  });
+  _chartRes = new Chart(ctx, resourceChartConfig(getSortedEntries(data, 'resource').slice(0, 7)));
 }
 
 function renderDailyChart(a) {
@@ -970,65 +1025,58 @@ function renderDailyChart(a) {
   _chartDaily = destroyChart(_chartDaily);
   const series = buildTrendSeries(a.dayMap, getReportPeriod());
   setText('chartDailySub', series.unit === 'month' ? 'Visits per month' : 'Visits per day');
-  _chartDaily = new Chart(ctx, {
-    type: 'line',
-    data: { labels: series.labels, datasets: [{ label: 'Visits', data: series.values, borderColor: '#B91C1C', backgroundColor: 'rgba(185,28,28,0.08)', fill: true, tension: 0.3, pointRadius: series.values.length > 45 ? 0 : 3, pointHoverRadius: 4, pointBackgroundColor: '#B91C1C' }] },
-    options: { responsive: true, maintainAspectRatio: true, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: false }, tooltip: visitsTooltip }, scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, maxTicksLimit: 8 } }, y: { beginAtZero: true, ticks: { precision: 0, font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.04)' } } } }
-  });
+  _chartDaily = new Chart(ctx, trendChartConfig(series));
 }
 
 function renderDeptChart(data) {
   const ctx = document.getElementById('chartDept'); if (!ctx) return;
   _chartDept = destroyChart(_chartDept);
-  const entries = getSortedEntries(data, 'course').slice(0, 8);
-  _chartDept = new Chart(ctx, {
-    type: 'bar',
-    data: { labels: entries.map(([k]) => formatCourseName(k)), datasets: [{ label: 'Visits', data: entries.map(([, v]) => v), backgroundColor: PALETTE_BAR, borderRadius: 5, borderSkipped: false }] },
-    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { title: items => entries[items[0].dataIndex][0], label: visitsTooltip.callbacks.label } } }, scales: { x: { beginAtZero: true, ticks: { precision: 0, font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.04)' } }, y: { grid: { display: false }, ticks: { font: { size: 11 } } } } }
-  });
+  _chartDept = new Chart(ctx, courseChartConfig(getSortedEntries(data, 'course').slice(0, 8)));
 }
 
 function renderPurposeChart(data) {
   const ctx = document.getElementById('chartPurpose'); if (!ctx) return;
   _chartPurpose = destroyChart(_chartPurpose);
-  const entries = getSortedEntries(data, 'purpose').slice(0, 8);
-  const total = data.length;
-  _chartPurpose = new Chart(ctx, {
-    type: 'doughnut',
-    data: { labels: entries.map(([k]) => k), datasets: [{ data: entries.map(([, v]) => v), backgroundColor: PALETTE_PIE, borderWidth: 2, borderColor: '#fff' }] },
-    options: { responsive: true, maintainAspectRatio: true, cutout: '58%', plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 10, boxWidth: 12 } }, tooltip: { callbacks: { label: c => ` ${c.label}: ${c.raw} (${pct(c.raw, total)}%)` } } } }
-  });
+  _chartPurpose = new Chart(ctx, purposeChartConfig(getSortedEntries(data, 'purpose').slice(0, 8), data.length));
 }
-
-// Bar colours: the peak bar in crimson, the rest in navy
-const peakColors = (values) => { const max = Math.max(...values); return values.map(v => v === max && v > 0 ? '#B91C1C' : '#1E3A5F'); };
 
 function renderHourChart(a) {
   const ctx = document.getElementById('chartHour'); if (!ctx) return;
   _chartHour = destroyChart(_chartHour);
-  // Only show the span of hours that actually had visits
-  const used = a.hours.map((v, h) => v ? h : -1).filter(h => h >= 0);
-  const from = used.length ? used[0] : 7, to = used.length ? used[used.length - 1] : 18;
-  const hrs = []; for (let h = from; h <= to; h++) hrs.push(h);
-  const values = hrs.map(h => a.hours[h]);
   setText('chartHourSub', a.peakHour !== null ? `Peak at ${formatHour(a.peakHour)}` : 'Visits by time of day');
-  _chartHour = new Chart(ctx, {
-    type: 'bar',
-    data: { labels: hrs.map(formatHour), datasets: [{ label: 'Visits', data: values, backgroundColor: peakColors(values), borderRadius: 4, borderSkipped: false }] },
-    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, tooltip: visitsTooltip }, scales: BAR_SCALES }
-  });
+  _chartHour = new Chart(ctx, hourChartConfig(a));
 }
 
 function renderWeekdayChart(a) {
   const ctx = document.getElementById('chartWeekday'); if (!ctx) return;
   _chartWeekday = destroyChart(_chartWeekday);
-  const values = WEEKDAY_ORDER.map(d => a.weekdays[d]);
   setText('chartWeekdaySub', a.peakWeekday !== null ? `Busiest: ${WEEKDAYS[a.peakWeekday]}` : 'Visits by weekday');
-  _chartWeekday = new Chart(ctx, {
-    type: 'bar',
-    data: { labels: WEEKDAY_ORDER.map(d => WEEKDAYS[d].slice(0, 3)), datasets: [{ label: 'Visits', data: values, backgroundColor: peakColors(values), borderRadius: 4, borderSkipped: false }] },
-    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, tooltip: visitsTooltip }, scales: BAR_SCALES }
-  });
+  _chartWeekday = new Chart(ctx, weekdayChartConfig(a));
+}
+
+// Draw a chart on a hidden canvas and return it as a PNG data URL, for embedding in the report
+const whiteBackground = { id: 'whiteBackground', beforeDraw: c => { const x = c.ctx; x.save(); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.restore(); } };
+
+function chartToImage(config, width, height) {
+  if (!window.Chart) return '';
+  const host = document.createElement('div');
+  host.style.cssText = `position:fixed;left:-10000px;top:0;width:${width}px;height:${height}px;`;
+  const canvas = document.createElement('canvas');
+  canvas.width = width; canvas.height = height;
+  canvas.style.width = width + 'px'; canvas.style.height = height + 'px';
+  host.appendChild(canvas);
+  document.body.appendChild(host);
+  let chart = null;
+  try {
+    chart = new Chart(canvas, { ...config, options: { ...config.options, responsive: false, maintainAspectRatio: false, animation: false, devicePixelRatio: 2 }, plugins: [whiteBackground] });
+    return chart.toBase64Image('image/png');
+  } catch (e) {
+    console.error('Chart image failed:', e);
+    return '';
+  } finally {
+    destroyChart(chart);
+    host.remove();
+  }
 }
 
 function renderRankingTable(containerId, entries, type, total) {
@@ -1095,6 +1143,28 @@ function closePdfExportModal() {
 }
 
 function generateFilteredPDF() {
+  const sel = getExportSelection(); if (!sel) return;
+  generateCustomPDF(sel.data, sel.title, sel.filterText, sel.includeSummary, sel.includeCharts, sel.includeLog, sel.sortBy);
+  closePdfExportModal();
+}
+
+async function generateFilteredDOCX() {
+  const sel = getExportSelection(); if (!sel) return;
+  const btn = document.getElementById('docxGenerateBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+  try {
+    await generateCustomDOCX(sel);
+    closePdfExportModal();
+  } catch (e) {
+    console.error('DOCX export failed:', e);
+    showToast('Could not create the Word file. Check your connection and try again.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Generate Word (.docx)'; }
+  }
+}
+
+// Read the export modal → filtered + sorted data and report options (null when nothing matches)
+function getExportSelection() {
   // Get filter values
   const title = document.getElementById('pdfTitle').value.trim() || 'Library Usage Report';
   const month = document.getElementById('pdfMonth').value;
@@ -1123,7 +1193,7 @@ function generateFilteredPDF() {
 
   if (!data.length) {
     showToast('No data matches the selected filters.');
-    return;
+    return null;
   }
 
   // Sort the data
@@ -1161,11 +1231,53 @@ function generateFilteredPDF() {
   if (date) filterDesc.push(`Date: ${parseLocalDate(date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}`);
   if (course) filterDesc.push(`Course: ${course}`);
 
-  // Generate PDF
-  generateCustomPDF(data, title, filterDesc.join(', '), includeSummary, includeCharts, includeLog, sortBy);
+  return { data, title, filterText: filterDesc.join(', '), includeSummary, includeCharts, includeLog, sortBy };
+}
 
-  // Close modal
-  closePdfExportModal();
+// Executive summary as [text, bold] pieces, so the PDF and the Word report share one wording
+function reportSummarySegments(a, filterText, includeLog, sortBy) {
+  const periodLabel = PERIOD_LABELS[getReportPeriod()] || 'All Time';
+  const topRes = a.resources[0];
+  const topCourse = a.courses.find(([k]) => k !== 'Unknown');
+  const s = n => n === 1 ? '' : 's';
+  const segs = [];
+  const t = text => segs.push([text, false]);
+  const b = text => segs.push([String(text), true]);
+  t('During '); b(periodLabel);
+  if (filterText) t(` (filtered by ${filterText})`);
+  t(', the SHC Library Resource Center recorded '); b(`${a.total} visit${s(a.total)}`);
+  t(' from '); b(`${a.uniqueVisitors} unique visitor${s(a.uniqueVisitors)}`);
+  t(' across '); b(`${a.coursesServed} academic course${s(a.coursesServed)}/department${s(a.coursesServed)}`);
+  t(' over '); b(`${a.activeDays} active day${s(a.activeDays)}`);
+  t(', an average of '); b(`${a.avgPerDay.toFixed(1)} visits per active day`);
+  t('. '); b(a.returningVisitors);
+  t(` visitor${s(a.returningVisitors)} (${pct(a.returningVisitors, a.uniqueVisitors)}%) used the e-resources more than once.`);
+  if (topRes) { t(' The most accessed resource was '); b(topRes[0]); t(' with '); b(`${topRes[1]} visits`); t(` (${pct(topRes[1], a.total)}% of all visits)`); }
+  if (topCourse) { t(', and the most represented course/department was '); b(topCourse[0]); t(` (${topCourse[1]} visits)`); }
+  t('.');
+  if (a.peakHour !== null) { t(' Usage peaked around '); b(formatHour(a.peakHour)); t(', with '); b(WEEKDAYS[a.peakWeekday]); t(' as the busiest day of the week'); }
+  if (a.busiestDay) {
+    t('; the single busiest day was '); b(parseLocalDate(a.busiestDay.date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }));
+    t(' with '); b(`${a.busiestDay.count} visits`);
+  }
+  t('.');
+  if (includeLog) { t(' The visitor log below is sorted by '); b(sortBy === 'date' ? 'date & time' : sortBy); t('.'); }
+  return segs;
+}
+
+// Chart images (same charts as the dashboard, drawn from the report's data)
+function reportChartImages(a, filterText) {
+  const series = buildTrendSeries(a.dayMap, getReportPeriod(), !!filterText);
+  const courseEntries = a.courses.slice(0, 10);
+  const img = { trendUnit: series.unit, size: {} };
+  const draw = (key, config, w, h) => { img[key] = chartToImage(config, w, h); img.size[key] = [w, h]; };
+  draw('trend', trendChartConfig(series), 900, 260);
+  draw('resource', resourceChartConfig(a.resources.slice(0, 7)), 440, 280);
+  draw('purpose', purposeChartConfig(a.purposes.slice(0, 8), a.total), 440, 280);
+  draw('course', courseChartConfig(courseEntries), 900, 50 + courseEntries.length * 30);
+  draw('weekday', weekdayChartConfig(a), 440, 260);
+  draw('hour', hourChartConfig(a), 440, 260);
+  return img;
 }
 
 function generateCustomPDF(data, title, filterText, includeSummary, includeCharts, includeLog, sortBy) {
@@ -1173,7 +1285,6 @@ function generateCustomPDF(data, title, filterText, includeSummary, includeChart
   const a = computeAnalytics(data);
   const periodLabel = PERIOD_LABELS[getReportPeriod()] || 'All Time';
   const topRes = a.resources[0];
-  const topCourse = a.courses.find(([k]) => k !== 'Unknown');
   const esc = escapeHtml;
   const LOG_LIMIT = 500;
 
@@ -1184,7 +1295,11 @@ function generateCustomPDF(data, title, filterText, includeSummary, includeChart
   const weekdayRows = WEEKDAY_ORDER.map(d => `<tr${d === a.peakWeekday ? ' style="background:#FEF2F2;"' : ''}><td>${WEEKDAYS[d]}</td><td style="text-align:right;font-weight:700;">${a.weekdays[d]}</td><td style="text-align:right;color:#78716C;">${pct(a.weekdays[d], a.total)}%</td></tr>`).join('');
   const hourRows = a.hours.map((c, h) => [h, c]).filter(([, c]) => c > 0).sort((x, y) => y[1] - x[1]).slice(0, 6).map(([h, c]) => `<tr><td>${formatHour(h)} – ${formatHour((h + 1) % 24)}</td><td style="text-align:right;font-weight:700;">${c}</td><td style="text-align:right;color:#78716C;">${pct(c, a.total)}%</td></tr>`).join('');
   const monthRows = a.months.map(m => `<tr><td>${m.label}</td><td style="text-align:right;font-weight:700;">${m.visits}</td><td style="text-align:right;">${m.unique}</td></tr>`).join('');
-  const busiestLabel = a.busiestDay ? parseLocalDate(a.busiestDay.date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+  const summaryHtml = reportSummarySegments(a, filterText, includeLog, sortBy).map(([t, b]) => b ? `<strong>${esc(t)}</strong>` : esc(t)).join('');
+
+  const img = includeCharts ? reportChartImages(a, filterText) : {};
+  const chartBox = (caption, src) => src ? `<div class="chart-box"><div class="sub">${caption}</div><img src="${src}" alt="${caption}"></div>` : '';
+  const chartRow = (...boxes) => boxes.some(Boolean) ? `<div class="chart-row${boxes.length === 1 ? ' one' : ''}">${boxes.join('')}</div>` : '';
 
   let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(title)}</title>
   <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#1C1917;font-size:13px;}
@@ -1199,7 +1314,13 @@ function generateCustomPDF(data, title, filterText, includeSummary, includeChart
   .body{padding:40px 48px;}
   .sec{margin-bottom:36px;page-break-inside:avoid;}
   .sec-log{page-break-inside:auto;}
-  .sec-title{font-size:15px;font-weight:700;color:#1E3A5F;border-bottom:2px solid #B91C1C;padding-bottom:6px;margin-bottom:16px;}
+  .sec-flow{page-break-inside:auto;}
+  .sec-flow .two{page-break-inside:avoid;}
+  .sec-title{font-size:15px;font-weight:700;color:#1E3A5F;border-bottom:2px solid #B91C1C;padding-bottom:6px;margin-bottom:16px;page-break-after:avoid;}
+  .chart-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:18px;page-break-inside:avoid;}
+  .chart-row.one{grid-template-columns:1fr;}
+  .chart-box{border:1px solid #E2DDD8;border-radius:8px;padding:12px 14px;background:#fff;}
+  .chart-box img{width:100%;height:auto;display:block;}
   .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}
   .kpi{background:#F7F6F3;border-radius:8px;padding:16px 18px;border:1px solid #E2DDD8;}
   .kpi .v{font-size:28px;font-weight:700;color:#1E3A5F;line-height:1;}
@@ -1242,29 +1363,36 @@ function generateCustomPDF(data, title, filterText, includeSummary, includeChart
         <div class="kpi"><div class="v sm">${a.peakHour !== null ? formatHour(a.peakHour) : '—'}</div><div class="l">Peak Hour</div></div>
         <div class="kpi"><div class="v sm">${a.peakWeekday !== null ? WEEKDAYS[a.peakWeekday] : '—'}</div><div class="l">Busiest Weekday</div></div>
       </div>
-      <div class="summary">During <strong>${periodLabel}</strong>${filterText ? ` (filtered by ${esc(filterText)})` : ''}, the SHC Library Resource Center recorded <strong>${a.total} visit${a.total === 1 ? '' : 's'}</strong> from <strong>${a.uniqueVisitors} unique visitor${a.uniqueVisitors === 1 ? '' : 's'}</strong> across <strong>${a.coursesServed} academic course${a.coursesServed === 1 ? '' : 's'}/department${a.coursesServed === 1 ? '' : 's'}</strong> over <strong>${a.activeDays} active day${a.activeDays === 1 ? '' : 's'}</strong>, an average of <strong>${a.avgPerDay.toFixed(1)} visits per active day</strong>. <strong>${a.returningVisitors}</strong> visitor${a.returningVisitors === 1 ? '' : 's'} (${pct(a.returningVisitors, a.uniqueVisitors)}%) used the e-resources more than once.${topRes ? ` The most accessed resource was <strong>${esc(topRes[0])}</strong> with <strong>${topRes[1]} visits</strong> (${pct(topRes[1], a.total)}% of all visits)` : ''}${topCourse ? `, and the most represented course/department was <strong>${esc(topCourse[0])}</strong> (${topCourse[1]} visits)` : ''}.${a.peakHour !== null ? ` Usage peaked around <strong>${formatHour(a.peakHour)}</strong>, with <strong>${WEEKDAYS[a.peakWeekday]}</strong> as the busiest day of the week` : ''}${a.busiestDay ? `; the single busiest day was <strong>${busiestLabel}</strong> with <strong>${a.busiestDay.count} visits</strong>` : ''}.${includeLog ? ` The visitor log below is sorted by <strong>${sortBy === 'date' ? 'date &amp; time' : esc(sortBy)}</strong>.` : ''}</div>
+      <div class="summary">${summaryHtml}</div>
     </div>`;
   }
 
   if (includeCharts) {
     html += `
-    <div class="sec">
+    ${img.trend ? `<div class="sec">
+      <div class="sec-title">Visit Trend</div>
+      ${chartRow(chartBox(img.trendUnit === 'month' ? 'Visits per Month' : 'Visits per Day', img.trend))}
+    </div>` : ''}
+    <div class="sec sec-flow">
       <div class="sec-title">Resource Utilization &amp; Visit Purpose</div>
+      ${chartRow(chartBox('Most Accessed Resources', img.resource), chartBox('Purpose of Visit', img.purpose))}
       <div class="two">
         <table><thead><tr><th>#</th><th>Resource</th><th style="text-align:right">Visits</th><th style="text-align:right">%</th></tr></thead><tbody>${mkRank(a.resources)}</tbody></table>
         <table><thead><tr><th>Purpose</th><th style="text-align:right">Count</th><th style="text-align:right">%</th></tr></thead><tbody>${mkSplit(a.purposes)}</tbody></table>
       </div>
     </div>
-    <div class="sec">
+    <div class="sec sec-flow">
       <div class="sec-title">Visitor Demographics</div>
+      ${chartRow(chartBox('Visits by Course / Department', img.course))}
       <div class="two">
         <table><thead><tr><th>#</th><th>Course / Department</th><th style="text-align:right">Visits</th><th style="text-align:right">%</th></tr></thead><tbody>${mkRank(a.courses, 15)}</tbody></table>
         <table><thead><tr><th>Month</th><th style="text-align:right">Visits</th><th style="text-align:right">Unique Visitors</th></tr></thead><tbody>${monthRows}</tbody></table>
       </div>
       ${a.courses.length ? '<p style="font-size:11px;color:#78716C;margin-top:8px;">Visitors who selected more than one course are counted under each course, so course percentages can total more than 100%.</p>' : ''}
     </div>
-    <div class="sec">
+    <div class="sec sec-flow">
       <div class="sec-title">Usage Patterns</div>
+      ${chartRow(chartBox('Visits by Day of Week', img.weekday), chartBox('Visits by Hour', img.hour))}
       <div class="two">
         <div><div class="sub">Visits by Day of Week</div><table><thead><tr><th>Day</th><th style="text-align:right">Visits</th><th style="text-align:right">%</th></tr></thead><tbody>${weekdayRows}</tbody></table></div>
         <div><div class="sub">Peak Hours</div><table><thead><tr><th>Time</th><th style="text-align:right">Visits</th><th style="text-align:right">%</th></tr></thead><tbody>${hourRows}</tbody></table></div>
@@ -1290,4 +1418,217 @@ function generateCustomPDF(data, title, filterText, includeSummary, includeChart
   const url = URL.createObjectURL(blob);
   openLink(url);
   showToast("Report opened — Print → Save as PDF.");
+}
+
+/* ── Word (.docx) report — same content as the PDF, but with real, editable Word tables ── */
+const DOCX_LIB = 'https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js';
+const _scriptLoads = {};
+
+// Load a library only when it is first needed (the docx builder is ~750 KB)
+function loadScriptOnce(src) {
+  if (!_scriptLoads[src]) {
+    _scriptLoads[src] = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = () => { delete _scriptLoads[src]; reject(new Error('Failed to load ' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+  return _scriptLoads[src];
+}
+
+function dataUrlToBytes(dataUrl) {
+  const bin = atob(dataUrl.split(',')[1]);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+async function generateCustomDOCX({ data, title, filterText, includeSummary, includeCharts, includeLog, sortBy }) {
+  if (!window.docx) {
+    showToast('Preparing Word export…');
+    await loadScriptOnce(DOCX_LIB);
+  }
+  const { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, AlignmentType,
+    HeadingLevel, ShadingType, BorderStyle, Footer, PageNumber, TableLayoutType, VerticalAlign } = window.docx;
+
+  const now = new Date();
+  const a = computeAnalytics(data);
+  const periodLabel = PERIOD_LABELS[getReportPeriod()] || 'All Time';
+  const LOG_LIMIT = 5000;
+  const NAVY = '1E3A5F', CRIMSON = 'B91C1C', MUTED = '78716C', CONTENT = 10080; // 7" of usable width (twips)
+  const NONE = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+  const NO_BORDERS = { top: NONE, bottom: NONE, left: NONE, right: NONE, insideHorizontal: NONE, insideVertical: NONE };
+
+  const run = (text, o = {}) => new TextRun({ text: String(text ?? ''), size: 20, ...o });
+  const para = (children, o = {}) => new Paragraph({ children: Array.isArray(children) ? children : [children], ...o });
+  const heading = text => para(run(text, { bold: true, color: NAVY, size: 28 }), {
+    heading: HeadingLevel.HEADING_1, keepNext: true, spacing: { before: 360, after: 160 },
+    border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: CRIMSON, space: 4 } }
+  });
+  const subheading = text => para(run(text, { bold: true, color: '44403C', size: 20 }), { keepNext: true, spacing: { before: 200, after: 80 } });
+  const note = text => para(run(text, { italics: true, color: MUTED, size: 16 }), { spacing: { before: 80, after: 120 } });
+
+  const cell = (text, width, o = {}) => new TableCell({
+    width: { size: width, type: WidthType.DXA },
+    shading: o.fill ? { type: ShadingType.CLEAR, color: 'auto', fill: o.fill } : undefined,
+    margins: { top: 60, bottom: 60, left: 100, right: 100 },
+    verticalAlign: VerticalAlign.CENTER,
+    children: [para(run(text, { bold: o.bold, color: o.color, size: o.size || 18 }), { alignment: o.align || AlignmentType.LEFT })]
+  });
+
+  // headers: [{ label, width, align }]; rows: arrays of cell values, or { cells, fill } to shade a row
+  const table = (headers, rows, o = {}) => new Table({
+    width: { size: headers.reduce((s, h) => s + h.width, 0), type: WidthType.DXA },
+    columnWidths: headers.map(h => h.width),
+    layout: TableLayoutType.FIXED,
+    rows: [
+      new TableRow({ tableHeader: true, cantSplit: true, children: headers.map(h => cell(h.label.toUpperCase(), h.width, { bold: true, color: 'FFFFFF', fill: NAVY, size: 16, align: h.align })) }),
+      ...rows.map((r, i) => {
+        const cells = Array.isArray(r) ? r : r.cells;
+        const fill = (!Array.isArray(r) && r.fill) || (o.zebra && i % 2 ? 'F9F8F6' : undefined);
+        return new TableRow({ cantSplit: true, children: cells.map((v, j) => cell(v, headers[j].width, { fill, align: headers[j].align, bold: headers[j].bold, color: headers[j].color })) });
+      })
+    ]
+  });
+
+  const R = AlignmentType.RIGHT;
+  const rankTable = (label, arr, width, limit = 10) => table([
+    { label: '#', width: 500, bold: true, color: CRIMSON },
+    { label, width: width - 2300 },
+    { label: 'Visits', width: 1000, align: R, bold: true, color: NAVY },
+    { label: '%', width: 800, align: R, color: MUTED }
+  ], arr.slice(0, limit).map(([n, c], i) => [i + 1, n, c, pct(c, a.total) + '%']));
+
+  const image = (src, [w, h], maxWidth) => {
+    const scale = Math.min(1, maxWidth / w);
+    return new ImageRun({ data: dataUrlToBytes(src), transformation: { width: Math.round(w * scale), height: Math.round(h * scale) } });
+  };
+  const chartBlock = (caption, src, size, maxWidth = 640) => src
+    ? [subheading(caption), para(image(src, size, maxWidth), { keepLines: true, spacing: { after: 160 } })]
+    : [];
+  // Two charts side by side in a borderless table
+  const chartPair = (left, right) => {
+    const half = CONTENT / 2;
+    const side = ([caption, src, size]) => new TableCell({
+      width: { size: half, type: WidthType.DXA }, borders: NO_BORDERS,
+      children: src ? [subheading(caption), para(image(src, size, 320))] : [para(run(''))]
+    });
+    if (!left[1] && !right[1]) return [];
+    return [new Table({ width: { size: CONTENT, type: WidthType.DXA }, columnWidths: [half, half], borders: NO_BORDERS, layout: TableLayoutType.FIXED, rows: [new TableRow({ cantSplit: true, children: [side(left), side(right)] })] }), para(run(''))];
+  };
+  // Two tables side by side — keeps the same layout as the PDF while each table stays editable
+  const tablePair = (left, right) => {
+    const half = CONTENT / 2;
+    const side = content => new TableCell({ width: { size: half, type: WidthType.DXA }, borders: NO_BORDERS, margins: { right: 120 }, children: [...content, para(run(''))] });
+    return new Table({ width: { size: CONTENT, type: WidthType.DXA }, columnWidths: [half, half], borders: NO_BORDERS, layout: TableLayoutType.FIXED, rows: [new TableRow({ children: [side(left), side(right)] })] });
+  };
+  const HALF = CONTENT / 2 - 200;
+
+  const children = [
+    para(run(title, { bold: true, size: 44, color: NAVY })),
+    para(run('Sacred Heart College — Lucena City, Inc.', { color: MUTED, size: 24 }), { spacing: { after: 240 } }),
+    table([{ label: 'Period', width: 2016 }, { label: 'Filters', width: 3024 }, { label: 'Generated', width: 2016 }, { label: 'Time', width: 1512 }, { label: 'Records', width: 1512, align: R }],
+      [[periodLabel, filterText || 'None', now.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }), now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }), a.total]])
+  ];
+
+  if (includeSummary) {
+    const topRes = a.resources[0];
+    const kpis = [
+      [a.total, 'Total Visits'], [a.uniqueVisitors, 'Unique Visitors'], [a.activeDays, 'Active Days'], [a.avgPerDay.toFixed(1), 'Avg Visits / Active Day'],
+      [a.coursesServed, 'Courses Served'], [topRes ? topRes[1] : 0, 'Top Resource Hits'],
+      [a.peakHour !== null ? formatHour(a.peakHour) : '—', 'Peak Hour'], [a.peakWeekday !== null ? WEEKDAYS[a.peakWeekday] : '—', 'Busiest Weekday']
+    ];
+    const kpiCell = ([v, l]) => new TableCell({
+      width: { size: CONTENT / 4, type: WidthType.DXA },
+      shading: { type: ShadingType.CLEAR, color: 'auto', fill: 'F7F6F3' },
+      margins: { top: 120, bottom: 120, left: 160, right: 160 },
+      children: [para(run(v, { bold: true, size: 36, color: NAVY })), para(run(l.toUpperCase(), { size: 14, color: MUTED }))]
+    });
+    const kpiBorder = { style: BorderStyle.SINGLE, size: 4, color: 'E2DDD8' };
+    children.push(
+      heading('Executive Summary'),
+      new Table({
+        width: { size: CONTENT, type: WidthType.DXA }, columnWidths: Array(4).fill(CONTENT / 4), layout: TableLayoutType.FIXED,
+        borders: { top: kpiBorder, bottom: kpiBorder, left: kpiBorder, right: kpiBorder, insideHorizontal: kpiBorder, insideVertical: kpiBorder },
+        rows: [new TableRow({ cantSplit: true, children: kpis.slice(0, 4).map(kpiCell) }), new TableRow({ cantSplit: true, children: kpis.slice(4).map(kpiCell) })]
+      }),
+      para(reportSummarySegments(a, filterText, includeLog, sortBy).map(([t, b]) => run(t, { bold: b, color: '44403C' })), {
+        spacing: { before: 240, after: 120, line: 320 },
+        shading: { type: ShadingType.CLEAR, color: 'auto', fill: 'FEF2F2' },
+        border: { left: { style: BorderStyle.SINGLE, size: 24, color: CRIMSON, space: 8 } }
+      })
+    );
+  }
+
+  if (includeCharts) {
+    const img = reportChartImages(a, filterText);
+    const hourRows = a.hours.map((c, h) => [h, c]).filter(([, c]) => c > 0).sort((x, y) => y[1] - x[1]).slice(0, 6);
+    if (img.trend) children.push(heading('Visit Trend'), ...chartBlock(img.trendUnit === 'month' ? 'Visits per Month' : 'Visits per Day', img.trend, img.size.trend));
+    children.push(
+      heading('Resource Utilization & Visit Purpose'),
+      ...chartPair(['Most Accessed Resources', img.resource, img.size.resource], ['Purpose of Visit', img.purpose, img.size.purpose]),
+      tablePair(
+        [rankTable('Resource', a.resources, HALF)],
+        [table([{ label: 'Purpose', width: HALF - 1800 }, { label: 'Count', width: 1000, align: R, bold: true }, { label: '%', width: 800, align: R, color: MUTED }],
+          a.purposes.map(([n, c]) => [n, c, pct(c, a.total) + '%']))]
+      ),
+      heading('Visitor Demographics'),
+      ...chartBlock('Visits by Course / Department', img.course, img.size.course),
+      tablePair(
+        [rankTable('Course / Department', a.courses, HALF, 15)],
+        [table([{ label: 'Month', width: HALF - 2400 }, { label: 'Visits', width: 1000, align: R, bold: true }, { label: 'Unique Visitors', width: 1400, align: R }],
+          a.months.map(m => [m.label, m.visits, m.unique]))]
+      ),
+      ...(a.courses.length ? [note('Visitors who selected more than one course are counted under each course, so course percentages can total more than 100%.')] : []),
+      heading('Usage Patterns'),
+      ...chartPair(['Visits by Day of Week', img.weekday, img.size.weekday], ['Visits by Hour', img.hour, img.size.hour]),
+      tablePair(
+        [subheading('Visits by Day of Week'), table([{ label: 'Day', width: HALF - 1800 }, { label: 'Visits', width: 1000, align: R, bold: true }, { label: '%', width: 800, align: R, color: MUTED }],
+          WEEKDAY_ORDER.map(d => ({ cells: [WEEKDAYS[d], a.weekdays[d], pct(a.weekdays[d], a.total) + '%'], fill: d === a.peakWeekday ? 'FEF2F2' : undefined })))],
+        [subheading('Peak Hours'), table([{ label: 'Time', width: HALF - 1800 }, { label: 'Visits', width: 1000, align: R, bold: true }, { label: '%', width: 800, align: R, color: MUTED }],
+          hourRows.map(([h, c]) => [`${formatHour(h)} – ${formatHour((h + 1) % 24)}`, c, pct(c, a.total) + '%']))]
+      )
+    );
+  }
+
+  if (includeLog) {
+    const rows = data.slice(0, LOG_LIMIT).map((e, i) => [i + 1, e.name || '—', e.id_number || '—', e.course || '—', e.purpose || '—', e.resource || '—', e.visited_at ? new Date(e.visited_at).toLocaleString() : '—']);
+    children.push(
+      heading(`Visitor Log — ${rows.length} of ${data.length} records`),
+      table([{ label: '#', width: 500 }, { label: 'Name', width: 1800, bold: true }, { label: 'ID No.', width: 1000 }, { label: 'Course', width: 1500 }, { label: 'Purpose', width: 1200 }, { label: 'Resource', width: 1780 }, { label: 'Date & Time', width: 2300 }], rows, { zebra: true })
+    );
+    if (data.length > LOG_LIMIT) children.push(note(`Showing first ${LOG_LIMIT} records. Use Export CSV for full data.`));
+  }
+
+  const doc = new Document({
+    creator: 'SHC Library Resource Center',
+    title,
+    styles: { default: { document: { run: { font: 'Calibri', size: 20 } } } },
+    sections: [{
+      properties: { page: { margin: { top: 1080, bottom: 1080, left: 1080, right: 1080 } } },
+      footers: {
+        default: new Footer({
+          children: [para([
+            run('Sacred Heart College Lucena City, Inc. — Library Resource Center    ·    Generated ' + now.toLocaleString('en-PH') + '    ·    Page ', { size: 16, color: MUTED }),
+            new TextRun({ children: [PageNumber.CURRENT], size: 16, color: MUTED })
+          ], { alignment: AlignmentType.CENTER })]
+        })
+      },
+      children
+    }]
+  });
+
+  const blob = await Packer.toBlob(doc);
+  const safeTitle = title.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'Library_Report';
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${safeTitle}_${getLocalDateString(now)}.docx`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 10000); // Safari needs the URL alive while the download starts
+  showToast(`Word report downloaded — ${a.total} records. Open it in Word to edit.`);
 }

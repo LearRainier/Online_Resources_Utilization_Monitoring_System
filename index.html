@@ -831,8 +831,8 @@
             <polyline points="14 2 14 8 20 8" />
           </svg>
         </div>
-        <h2>Export PDF Report</h2>
-        <p>Customize your PDF report with filters and sorting options</p>
+        <h2>Export Report</h2>
+        <p>Customize your report, then save it as a PDF or an editable Word document</p>
       </div>
       <div class="modal-body">
         <div class="form-group">
@@ -943,7 +943,7 @@
             </div>
             <div class="checkbox-item">
               <input type="checkbox" id="pdfIncludeCharts" checked>
-              <label for="pdfIncludeCharts">Include resource and course rankings</label>
+              <label for="pdfIncludeCharts">Include charts with resource and course rankings</label>
             </div>
             <div class="checkbox-item">
               <input type="checkbox" id="pdfIncludeLog" checked>
@@ -954,6 +954,7 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn-cancel" onclick="closePdfExportModal()">Cancel</button>
+        <button type="button" class="btn-submit btn-docx" id="docxGenerateBtn" onclick="generateFilteredDOCX()">Generate Word (.docx)</button>
         <button type="button" class="btn-submit" onclick="generateFilteredPDF()">Generate PDF</button>
       </div>
     </div>
